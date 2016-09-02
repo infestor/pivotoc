@@ -1,0 +1,6 @@
+#!/bin/bash
+
+/usr/local/CrossPack-AVR/bin/avr-gcc pivotoc_main.cpp -Wall -gdwarf-2 -DCOMPILE_AVR -DF_CPU=16000000UL -O1 -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums -MD -MP -MT -fdata-sections -ffunction-sections -mmcu=atmega328p -o pivotoc.a
+
+/usr/local/CrossPack-AVR/bin/avr-size --mcu=atmega328p --format=avr pivotoc.a
+
