@@ -4,3 +4,5 @@
 
 /usr/local/CrossPack-AVR/bin/avr-size --mcu=atmega328p --format=avr pivotoc.a
 
+/usr/local/CrossPack-AVR/bin/avr-objdump -h -S pivotoc.a > pivotoc.lss
+
