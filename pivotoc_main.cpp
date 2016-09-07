@@ -4,6 +4,8 @@
 #include <avr/wdt.h> 
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
+
+#include "onewire.h"
 #else
 typedef unsigned char uint8_t;
 typedef unsigned short int uint16_t;
@@ -30,6 +32,11 @@ typedef union {
  };
 } Int32Union_t;
 
+#define ADRESA_EE_CENA_PIVA 0
+#define ADRESA_EE_IMPULZY_NA_LITR_LSB 1
+#define ADRESA_EE_IMPULZY_NA_LITR_MSB 2
+#define ADRESA_EE_CIPY_START 3
+
 #define STAV_OFF    0
 #define STAV_NORMAL 1
 #define STAV_SPRAVA 2
@@ -37,6 +44,7 @@ typedef union {
 #define PIN_STAV_NORMAL 5
 #define PIN_STAV_SPRAVA 6
 #define PORT_STAV PORTB
+
 #define PIN_SOLENOID 5
 #define PORT_SOLENOID PORTD
 #define SOLENOID_OFF() PORT_SOLENOID &= ~(1 << PIN_SOLENOID)
@@ -44,15 +52,17 @@ typedef union {
 
 #define TIMER_1SEC 100
 
-const char SCREEN_ZAKLADNI[]        = " *STOPARI NYMBURK*\n      *VYCEP*";
-const char SCREEN_ZAKLADNI_SPRAVA[] = " *STOPARI NYMBURK*\n     *SPRAVA*";
+const char SCREEN_ZAKLADNI[]           = " *STOPARI NYMBURK*\n      *VYCEP*";
+const char SCREEN_ZAKLADNI_SPRAVA[]    = " *STOPARI NYMBURK*\n     *SPRAVA*";
 const char SCREEN_VYCEP_ZAKAZNIK_L1[]  = "VYCEP ZAKAZNIK %02d\n";
 const char SCREEN_VYCEP_ZAKAZNIK_L2[]  = "s[l]:%2.2f nyni:%1.2f";
-const char SCREEN_SPRAVA_ZAKAZNIK[] = "SPRAVA ZAKAZNIK %02d\ns[l]:%2.2f cena:%d,-";
-const char SCREEN_CIP_NEZNAMY[]  = " !! NEZNAMY CIP !!";
-const char SCREEN_INICIALIZACE[] = "   INICIALIZACE..";
+const char SCREEN_SPRAVA_ZAKAZNIK[]    = "SPRAVA ZAKAZNIK %02d\ns[l]:%2.2f cena:%d,-";
+const char SCREEN_CIP_NEZNAMY[]        = " !! NEZNAMY CIP !!";
+const char SCREEN_INICIALIZACE[]       = "   INICIALIZACE..";
 
-const char ADRESY_CIPU[][9] = { "12345678", "12ABCDEF", "01234567", "98765432", "55556666"};
+#define ADDR_LEN 8
+const uint8_t ADRESY_CIPU[][ADDR_LEN] = { {0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8}, {0x1,0x2,0xA,0xB,0xC,0xD,0xE,0xF},
+{0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7}, {0x9,0x8,0x7,0x6,0x5,0x4,0x3,0x2}, {0x5,0x5,0x5,0x5,0x6,0x6,0x6,0x6}};
 #define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
 volatile uint8_t  KONTROLNI_SOUCTY[POCET_CIPU]; //kontrolni soucty adres pro rychlejsi vyhledavani
 
@@ -68,10 +78,11 @@ volatile float    CENA_ZA_IMPULZ;
 
 volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
-volatile uint8_t  prihlaseny_cip_adresa[9];
+volatile uint8_t  prihlaseny_cip_adresa[ADDR_LEN];
 volatile uint16_t prihlaseny_cip_impulzy;
 
 volatile uint16_t longTimer;
+volatile uint8_t aktualni_stav;
 
 #define DISP_SIZE 43 //2x20 + jden znak na kazdej radek + 1 na zalomeni
 volatile char displej_text[DISP_SIZE];
@@ -168,6 +179,37 @@ void ZmenCenu(uint16_t nova_cena)
 }
 
 //======================================================
+void SaveData(void)
+{
+#ifdef COMPILE_AVR
+	IntUnion_t volatile *p16;
+	Int32Union_t volatile eep_dword;
+
+	//mapovani musi byt stejne jako pro LoadData()
+	eeprom_update_byte((uint8_t *)ADRESA_EE_CENA_PIVA, CENA_PIVA);
+	p16 = (IntUnion_t*)&IMPULZY_NA_LITR;
+	eeprom_update_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_LSB, (*p16).lsb);
+	eeprom_update_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_MSB, (*p16).msb);
+
+	//cyklujeme pres vsechny cipy
+	uint8_t adresa = ADRESA_EE_CIPY_START;
+	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
+	{
+		p16 = (IntUnion_t*)&AKUMULOVANE_IMPULZY[cip];
+		eep_dword.uint1.lsb = (*p16).lsb;
+		eep_dword.uint1.msb = (*p16).msb;
+
+		p16 = (IntUnion_t*)&AKUMULOVANA_CENA[cip];
+		eep_dword.uint2.lsb = (*p16).lsb;
+		eep_dword.uint2.msb = (*p16).msb;
+
+		eeprom_update_dword((uint32_t*)adresa, eep_dword.uint_long);
+
+		adresa += 4; //posun se na dalsi pametove misto
+	}
+#endif
+}
+
 void LoadData(void)
 {
 #ifdef COMPILE_AVR
@@ -187,14 +229,14 @@ void LoadData(void)
 	//u vsech 16bit dat je prvni LSB
 
 	//nactem cenu a impulzy na litr
-	CENA_PIVA = eeprom_read_byte((uint8_t *)0);
+	CENA_PIVA = eeprom_read_byte((uint8_t *)ADRESA_EE_CENA_PIVA);
 	p16 = (IntUnion_t*)&IMPULZY_NA_LITR;
-	(*p16).lsb = eeprom_read_byte((uint8_t *)1);
-	(*p16).msb = eeprom_read_byte((uint8_t *)2);
+	(*p16).lsb = eeprom_read_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_LSB);
+	(*p16).msb = eeprom_read_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_MSB);
 	if (((*p16).lsb == 255) and ((*p16).msb == 255)) IMPULZY_NA_LITR = 300; //jen pro prvni nacteni cerstve eepromky
 
 	//cykluj pres vsechny cipy a nacti jejich ulozena data
-	uint16_t adresa = 3;
+	uint8_t adresa = ADRESA_EE_CIPY_START;
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
 		eep_dword.uint_long = eeprom_read_dword((uint32_t*)adresa);
@@ -227,7 +269,7 @@ void LoadData(void)
 }
 
 //======================================================
-uint8_t KontrolniSoucet(const char adresa[9])
+uint8_t KontrolniSoucet(const uint8_t adresa[ADDR_LEN])
 {
 	//cykluj pres vsecky znaky adresy cipu
 	uint8_t kontrolni_soucet = 0;
@@ -250,7 +292,7 @@ inline void SpocitatKontrolniSoucty(void)
 }
 
 //======================================================
-uint8_t NajdiCip(const char adresa[9])
+uint8_t NajdiCip(const uint8_t adresa[ADDR_LEN])
 {
 	uint8_t kontrolni_soucet = KontrolniSoucet(adresa);
 	uint8_t cip;
@@ -313,6 +355,26 @@ void ZobrazInfoCipVytoc(uint8_t id, bool both)
 	printf(SCREEN_VYCEP_ZAKAZNIK_L2, litru, nyni);
 }
 
+//======================================================
+//zkusi nacist na 1-wire pripojeny cip
+//kdyz neco precte, ulozi vycteny data do prihlaseny_cip_adresa a vrati 1
+inline uint8_t PrectiCip(void)
+{
+#ifdef COMPILE_AVR
+
+	uint8_t status = ow_rom_search(OW_SEARCH_FIRST, prihlaseny_cip_adresa);
+
+	if (status == OW_LAST_DEVICE)
+	{
+		return 1;
+	}
+
+#endif
+}
+
+//======================================================
+//======================================================
+//======================================================
 int main (void)
 {
 	sprintf((char *)displej_text, SCREEN_INICIALIZACE);
