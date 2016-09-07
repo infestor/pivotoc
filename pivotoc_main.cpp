@@ -51,6 +51,7 @@ typedef union {
 #define SOLENOID_ON() PORT_SOLENOID |= (1 << PIN_SOLENOID)
 
 #define TIMER_1SEC 100
+#define PRIHLASENI_TIMEOUT 30*TIMER_1SEC
 
 const char SCREEN_ZAKLADNI[]           = " *STOPARI NYMBURK*\n      *VYCEP*";
 const char SCREEN_ZAKLADNI_SPRAVA[]    = " *STOPARI NYMBURK*\n     *SPRAVA*";
@@ -80,9 +81,13 @@ volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
 volatile uint8_t  prihlaseny_cip_adresa[ADDR_LEN];
 volatile uint16_t prihlaseny_cip_impulzy;
+volatile uint16_t prihlaseny_cip_timeout;
 
 volatile uint16_t longTimer;
-volatile uint8_t aktualni_stav;
+volatile uint8_t  bylTimer;
+volatile uint8_t  aktualni_stav;
+volatile uint8_t  co_zobrazit_na_displeji;
+volatile uint8_t  refresh_display;
 
 #define DISP_SIZE 43 //2x20 + jden znak na kazdej radek + 1 na zalomeni
 volatile char displej_text[DISP_SIZE];
@@ -128,6 +133,7 @@ void USART_Transmit( char *data, uint8_t len )
 ISR(TIMER0_COMPA_vect)
 {
   	longTimer++;
+		bylTimer = true;
 }
 
 ISR(BADISR_vect) { //just for case
@@ -210,6 +216,7 @@ void SaveData(void)
 #endif
 }
 
+//======================================================
 void LoadData(void)
 {
 #ifdef COMPILE_AVR
@@ -356,17 +363,58 @@ void ZobrazInfoCipVytoc(uint8_t id, bool both)
 }
 
 //======================================================
+void OdhlasCip(void)
+{
+	je_prihlaseno = false;
+	prihlaseny_cip_id = 255;
+	prihlaseny_cip_timeout = 0;
+	prihlaseny_cip_impulzy = 0;
+	sprintf((char *)displej_text, SCREEN_ZAKLADNI);
+	refresh_display = true;
+#ifdef COMPILE_AVR
+	SOLENOID_OFF();
+#endif
+}
+
+//======================================================
 //zkusi nacist na 1-wire pripojeny cip
-//kdyz neco precte, ulozi vycteny data do prihlaseny_cip_adresa a vrati 1
+//kdyz neco precte, ulozi vycteny data do prihlaseny_cip_adresa
+//pak zkusi cip najit a pripadne prihlasit
 inline uint8_t PrectiCip(void)
 {
 #ifdef COMPILE_AVR
 
-	uint8_t status = ow_rom_search(OW_SEARCH_FIRST, prihlaseny_cip_adresa);
-
-	if (status == OW_LAST_DEVICE)
+	if (ow_rom_search(OW_SEARCH_FIRST, prihlaseny_cip_adresa) == OW_LAST_DEVICE)
 	{
-		return 1;
+		//cip byl detekovan na 1-wire a jeho data nactena, zkusime ho najit v databazi
+		uint8_t nalezeny_cip = NajdiCip(prihlaseny_cip_adresa);
+		if (nalezeny_cip < 255)
+		{
+			//cip mame v databazi, takze ho prihlasime (a pripadne odhlasime predchozi, nebo odhlasime i ten stejny)
+			if ((je_prihlaseno == true) && (prihlaseny_cip_id == nalezeny_cip))
+			{
+				//cip je stejny - takze ho jen odhlasime
+				//TODO - mozna bude lepci misto odhlasovani prodlouzitrefreshovat timeout
+				OdhlasCip();
+			}
+			else
+			{
+				//prihlasime novy (to odhlasi i stary)
+				je_prihlaseno = true;
+				prihlaseny_cip_id = nalezeny_cip;
+				prihlaseny_cip_timeout = PRIHLASENI_TIMEOUT;
+				prihlaseny_cip_impulzy = 0;
+				SOLENOID_ON();
+				ZobrazInfoCipVytoc(prihlaseny_cip_id, true);
+			}
+		}
+		// Tento cip nemame v databazi, takze vypiseme hlasku
+		else
+		{
+			sprintf((char *)displej_text, SCREEN_CIP_NEZNAMY);
+		}
+		
+		refresh_display = true;
 	}
 
 #endif
@@ -410,6 +458,32 @@ int main (void)
 	printf("\n|--------|---------|\n");
 	ZobrazInfoCipSprava(zak);
 	printf("\n|--------|---------|\n\n");
+
+
+#ifdef COMPILE_AVR
+	while(1) {
+
+		//obsluha vsech timeru az tady misto aby se to delalo v preruseni
+		if (bylTimer)
+		{
+			bylTimer = false;
+			if (prihlaseny_cip_timeout > 0) prihlaseny_cip_timeout--;
+		}
+
+
+		//kontrola a pripadne odhlaseni timeoutovaneho cipu
+		if (je_prihlaseno)
+		{
+			if (prihlaseny_cip_timeout == 0) OdhlasCip();
+		}
+
+		//je potreba prekreslit display?
+		if (refresh_display)
+		{
+			refresh_display = false;
+		}
+	}
+#endif
 
 	return(0);
 }
