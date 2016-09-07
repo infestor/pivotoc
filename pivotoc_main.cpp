@@ -52,6 +52,7 @@ typedef union {
 
 #define TIMER_1SEC 100
 #define PRIHLASENI_TIMEOUT 30*TIMER_1SEC
+#define CTENI_CIPU_TIMEOUT TIMER_1SEC/2
 
 const char SCREEN_ZAKLADNI[]           = " *STOPARI NYMBURK*\n      *VYCEP*";
 const char SCREEN_ZAKLADNI_SPRAVA[]    = " *STOPARI NYMBURK*\n     *SPRAVA*";
@@ -84,6 +85,7 @@ volatile uint16_t prihlaseny_cip_impulzy;
 volatile uint16_t prihlaseny_cip_timeout;
 
 volatile uint16_t longTimer;
+volatile uint8_t  timerCteniCipu;
 volatile uint8_t  bylTimer;
 volatile uint8_t  aktualni_stav;
 volatile uint8_t  co_zobrazit_na_displeji;
@@ -380,14 +382,14 @@ void OdhlasCip(void)
 //zkusi nacist na 1-wire pripojeny cip
 //kdyz neco precte, ulozi vycteny data do prihlaseny_cip_adresa
 //pak zkusi cip najit a pripadne prihlasit
-inline uint8_t PrectiCip(void)
+void PrectiCip(void)
 {
 #ifdef COMPILE_AVR
 
-	if (ow_rom_search(OW_SEARCH_FIRST, prihlaseny_cip_adresa) == OW_LAST_DEVICE)
+	if (ow_rom_search(OW_SEARCH_FIRST, (uint8_t *)prihlaseny_cip_adresa) == OW_LAST_DEVICE)
 	{
 		//cip byl detekovan na 1-wire a jeho data nactena, zkusime ho najit v databazi
-		uint8_t nalezeny_cip = NajdiCip(prihlaseny_cip_adresa);
+		uint8_t nalezeny_cip = NajdiCip((uint8_t *)prihlaseny_cip_adresa);
 		if (nalezeny_cip < 255)
 		{
 			//cip mame v databazi, takze ho prihlasime (a pripadne odhlasime predchozi, nebo odhlasime i ten stejny)
@@ -468,8 +470,8 @@ int main (void)
 		{
 			bylTimer = false;
 			if (prihlaseny_cip_timeout > 0) prihlaseny_cip_timeout--;
+			if (timerCteniCipu > 0) timerCteniCipu--;
 		}
-
 
 		//kontrola a pripadne odhlaseni timeoutovaneho cipu
 		if (je_prihlaseno)
@@ -482,9 +484,16 @@ int main (void)
 		{
 			refresh_display = false;
 		}
+
+		if (timerCteniCipu == 0)
+		{
+			timerCteniCipu = CTENI_CIPU_TIMEOUT;
+			PrectiCip();
+		}
 	}
 #endif
 
+	SaveData();
 	return(0);
 }
 
