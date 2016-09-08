@@ -91,6 +91,14 @@ volatile uint8_t  bylTimer;
 volatile uint8_t  aktualni_stav;
 volatile uint8_t  tlacitka_minule;
 
+//promenne spojene s obsluhou UART
+#define UART_BUFF_MAX_LEN 4 //musi se do nej vejit prijmout retezec DATA
+#define UART_TIMEOUT TIMER_1SEC/50 //20ms
+volatile uint8_t uartIncoming;
+volatile uint8_t uartPos;
+volatile uint8_t uartBuf[UART_BUFF_MAX_LEN];
+volatile uint8_t timerUart;
+
 //tady jsou potrebne definice k fungovani a praci s displejem
 volatile uint8_t  refresh_display;
 
@@ -128,6 +136,7 @@ void DisplayFrontaPush(uint8_t novy_stav)
 	if (display_fronta_len == DISPLAY_FRONTA_MAXLEN) display_fronta_len--;
 }
 
+//======================================================
 uint8_t DisplayFrontaPop(void)
 {
 	//vratime stav na pozici 0 a cele pole pak posuneme o jednu niz cimz se puvodni nulova pozice prepise
@@ -148,11 +157,13 @@ uint8_t DisplayFrontaPop(void)
 	return vratit;
 }
 
+//======================================================
 void PrekreslitDisplay(uint8_t novy_stav)
 {
 
 }
 
+//======================================================
 #ifdef COMPILE_AVR
 void SetRegisters(void)
 {
@@ -187,6 +198,35 @@ void USART_Transmit( char *data, uint8_t len )
 }
 
 //======================================================
+ISR(USART_RX_vect)
+{
+	uint8_t inp = UDR0;
+
+	if (uartIncoming == 0)
+	{
+		if (inp == 254)
+		{
+			uartIncoming = 1;
+			//uartBufEmpty = 1;
+			uartPos = 0;
+			timerUart = UART_TIMEOUT;
+		}
+	}
+	else
+	{
+		if (uartPos == UART_BUFF_MAX_LEN) //incoming packet is longer than allowed
+		{
+			uartIncoming = 0;
+		}
+		else
+		{
+			((char*)uartBuf)[uartPos] = inp;
+			uartPos++;
+		}
+	}
+}
+
+//======================================================
 ISR(TIMER0_COMPA_vect)
 {
   	longTimer++;
@@ -195,6 +235,30 @@ ISR(TIMER0_COMPA_vect)
 
 ISR(BADISR_vect) { //just for case
   __asm__("nop\n\t");
+}
+
+
+//======================================================
+// posle raw data z poli primo na uart
+// zadne prepocitavani se nekona
+// proste jen vezme akumulovanou cenu a secte normalni a akumulovane impulzy a posle to
+void PosliDataNaUart(void)
+{
+	uint8_t sendBuff[4];
+	IntUnion_t uni;
+	IntUnion_t *p16;
+
+	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
+	{
+		uni.uint = VYTOCENE_IMPULZY[cip] + AKUMULOVANE_IMPULZY[cip];
+		sendBuff[0] = uni.lsb;
+		sendBuff[1] = uni.msb;
+		p16 = (IntUnion_t*)&AKUMULOVANA_CENA[cip];
+		sendBuff[3] = (*p16).lsb;
+		sendBuff[4] = (*p16).msb;
+
+		USART_Transmit((char *)sendBuff, 4);
+	}
 }
 
 #endif
@@ -547,6 +611,7 @@ int main (void)
 			if (prihlaseny_cip_timeout > 0) prihlaseny_cip_timeout--;
 			if (timerCteniCipu > 0) timerCteniCipu--;
 			if (timerDisplay > 0) timerDisplay--;
+			if (timerUart > 0) timerUart--;
 		}
 
 		//kontrola a pripadne odhlaseni timeoutovaneho cipu
@@ -560,6 +625,38 @@ int main (void)
 		{
 			timerCteniCipu = CTENI_CIPU_TIMEOUT;
 			PrectiCip();
+		}
+
+	 if ( (uartIncoming) && (uartPos == (sizeof(mirfPacket)-1)) ) //whole packet is received
+	 {
+		 uint8_t res = Mirf.sendPacket((mirfPacket*)&outPacket);
+		 uartIncoming = 0;
+
+		 if (res == 0) //packet was not transmitted
+		 {
+			 USART_Transmit("ER", 2);
+			 awaitingResult = 0;
+		 }
+		 else //packet was sent, we will wait for sendResult and send it to usart
+		 {
+			 awaitingResult = 1;
+		 }
+		}
+		
+		if (uartIncoming == 1)
+		{
+			if (timerUart == 0) uartIncoming = 0; //timeout elapsed
+
+			if (uartPos == UART_BUFF_MAX_LEN)
+			{
+				//mame prijaty cely buffer, tak zkontrolujem jestli je to spravny pozadavek (string DATA)
+				if ( (uartBuf[0] == 'D') && (uartBuf[0] == 'A') && (uartBuf[0] == 'T') && (uartBuf[0] == 'A') )
+				{
+					//v bufferu je opravdu pozadavek od pocitace - posleme data
+					PosliDataNaUart();
+				}
+				uartIncoming = 0;
+			}
 		}
 
 		//je potreba prekreslit display?
