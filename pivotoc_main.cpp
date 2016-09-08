@@ -87,16 +87,71 @@ volatile uint16_t prihlaseny_cip_timeout;
 volatile uint16_t longTimer;
 volatile uint8_t  timerCteniCipu;
 volatile uint8_t  bylTimer;
+
 volatile uint8_t  aktualni_stav;
-volatile uint8_t  co_zobrazit_na_displeji;
+volatile uint8_t  tlacitka_minule;
+
+//tady jsou potrebne definice k fungovani a praci s displejem
 volatile uint8_t  refresh_display;
+
+enum MozneStavyDispleje {
+	STAV_DISPLEJE_NIC = 0,
+	DISP_STAV_ZAKLADNI,
+	DISP_STAV_ZAKLADNI_SPRAVA,
+	DISP_STAV_INICIALIZACE,
+	DISP_STAV_NEZNAMY_CIP,
+	DISP_STAV_VYCEP_ZAKAZNIK_FULL,
+	DISP_STAV_VYCEP_ZAKAZNIK_LITRY,
+	DISP_STAV_SPRAVA_ZAKAZNIK
+};
+
+#define DISPLAY_FRONTA_MAXLEN 5
+#define DISPLAY_REFRESH_TIME TIMER_1SEC
+volatile uint8_t display_fronta[DISPLAY_FRONTA_MAXLEN];
+volatile uint8_t display_fronta_len;
+volatile uint8_t display_posledni_stav;
+volatile uint8_t timerDisplay;
 
 #define DISP_SIZE 43 //2x20 + jden znak na kazdej radek + 1 na zalomeni
 volatile char displej_text[DISP_SIZE];
-volatile uint8_t tlacitka_minule;
 
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+void DisplayFrontaPush(uint8_t novy_stav)
+{
+	//pridame stav na konec pole (doufam ze nenastane pripad, aby se pole nekdy preplnilo)
+	//to pak nevim jestli je lepci diskardovat prvni a nebo posledni polozku
+	//ted se holt kdyztak nahradi dycky ta posledni
+	display_fronta[display_fronta_len] = novy_stav;
+	display_fronta_len++;
+	if (display_fronta_len == DISPLAY_FRONTA_MAXLEN) display_fronta_len--;
+}
+
+uint8_t DisplayFrontaPop(void)
+{
+	//vratime stav na pozici 0 a cele pole pak posuneme o jednu niz cimz se puvodni nulova pozice prepise
+	//a nakonec jednu nulu vlozime
+
+	//asi muzem rict, ze kdyz je pole prazdne, vracime automaticky stav NIC
+	if (display_fronta_len == 0) return STAV_DISPLEJE_NIC;
+
+	uint8_t vratit = display_fronta[0];
+	for (uint8_t i=0; i < display_fronta_len; i++)
+	{
+		display_fronta[i] = display_fronta[i+1];
+	}
+
+	display_fronta[display_fronta_len] = STAV_DISPLEJE_NIC;
+	display_fronta_len--;
+
+	return vratit;
+}
+
+void PrekreslitDisplay(uint8_t novy_stav)
+{
+
+}
 
 #ifdef COMPILE_AVR
 void SetRegisters(void)
@@ -164,6 +219,15 @@ void ResetujVsechnyCipy(void)
 }	
 
 //======================================================
+void AkumulujCenu(uint8_t cip)
+{
+	uint16_t cena = VYTOCENE_IMPULZY[cip] * CENA_ZA_IMPULZ * 100; //je to na halire
+	AKUMULOVANA_CENA[cip] += cena;
+	AKUMULOVANE_IMPULZY[cip] += VYTOCENE_IMPULZY[cip];
+	VYTOCENE_IMPULZY[cip] = 0;
+}
+
+//======================================================
 void ZmenCenu(uint16_t nova_cena)
 {
 	//projdeme vsechny cipy
@@ -174,10 +238,7 @@ void ZmenCenu(uint16_t nova_cena)
 
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
-		uint16_t cena = VYTOCENE_IMPULZY[cip] * CENA_ZA_IMPULZ * 100; //je to na halire
-		AKUMULOVANA_CENA[cip] += cena;
-		AKUMULOVANE_IMPULZY[cip] += VYTOCENE_IMPULZY[cip];
-		VYTOCENE_IMPULZY[cip] = 0;
+		AkumulujCenu(cip);
 	}
 
 	//a ted nastavime novou cenu piva
@@ -203,6 +264,11 @@ void SaveData(void)
 	uint8_t adresa = ADRESA_EE_CIPY_START;
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
+		//nejdriv musime presunout vsechno do akumulovanych impulzu
+		//a taky spocitat cenu a tu taky pricist do akumulovane
+		//a pak teprve muzeme ukladat do eeprom
+		AkumulujCenu(cip);
+
 		p16 = (IntUnion_t*)&AKUMULOVANE_IMPULZY[cip];
 		eep_dword.uint1.lsb = (*p16).lsb;
 		eep_dword.uint1.msb = (*p16).msb;
@@ -371,7 +437,8 @@ void OdhlasCip(void)
 	prihlaseny_cip_id = 255;
 	prihlaseny_cip_timeout = 0;
 	prihlaseny_cip_impulzy = 0;
-	sprintf((char *)displej_text, SCREEN_ZAKLADNI);
+	//sprintf((char *)displej_text, SCREEN_ZAKLADNI);
+	DisplayFrontaPush(DISP_STAV_ZAKLADNI);
 	refresh_display = true;
 #ifdef COMPILE_AVR
 	SOLENOID_OFF();
@@ -437,6 +504,13 @@ int main (void)
 	sei();
 #endif
 
+	aktualni_stav = STAV_NORMAL;
+	display_posledni_stav = DISP_STAV_INICIALIZACE;
+	//sprintf((char *)displej_text, SCREEN_ZAKLADNI);
+	DisplayFrontaPush(DISP_STAV_ZAKLADNI);	
+	refresh_display = true;
+
+
 	//debug data
 	uint8_t zak = 0;
 	AKUMULOVANE_IMPULZY[zak] = 0;
@@ -466,11 +540,13 @@ int main (void)
 	while(1) {
 
 		//obsluha vsech timeru az tady misto aby se to delalo v preruseni
+		//melo by to byt hned na zacatku cyklu, aby se podle toho pak zbytek podminek mohl zaridit
 		if (bylTimer)
 		{
 			bylTimer = false;
 			if (prihlaseny_cip_timeout > 0) prihlaseny_cip_timeout--;
 			if (timerCteniCipu > 0) timerCteniCipu--;
+			if (timerDisplay > 0) timerDisplay--;
 		}
 
 		//kontrola a pripadne odhlaseni timeoutovaneho cipu
@@ -479,16 +555,25 @@ int main (void)
 			if (prihlaseny_cip_timeout == 0) OdhlasCip();
 		}
 
-		//je potreba prekreslit display?
-		if (refresh_display)
-		{
-			refresh_display = false;
-		}
-
+		//uz je cas zkusit jestli je prilozen cip?
 		if (timerCteniCipu == 0)
 		{
 			timerCteniCipu = CTENI_CIPU_TIMEOUT;
 			PrectiCip();
+		}
+
+		//je potreba prekreslit display?
+		//tohle by melo byt az na konci cyklu
+		if ( (timerDisplay == 0) || (refresh_display) )
+		{	
+			timerDisplay = DISPLAY_REFRESH_TIME;
+
+			uint8_t novy_stav = DisplayPolePop();
+			//prekreslovat jen jestli je v poli neco jineho nez prazdno
+			//jinak pouzijem minuly screen
+			if (novy_stav == STAV_DISPLEJE_NIC) novy_stav = display_posledni_stav;	
+			PrekreslitDisplay(novy_stav);
+			refresh_display = false;
 		}
 	}
 #endif
