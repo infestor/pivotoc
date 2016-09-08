@@ -568,7 +568,7 @@ int main (void)
 		{	
 			timerDisplay = DISPLAY_REFRESH_TIME;
 
-			uint8_t novy_stav = DisplayPolePop();
+			uint8_t novy_stav = DisplayFrontaPop();
 			//prekreslovat jen jestli je v poli neco jineho nez prazdno
 			//jinak pouzijem minuly screen
 			if (novy_stav == STAV_DISPLEJE_NIC) novy_stav = display_posledni_stav;	
