@@ -67,7 +67,9 @@ const char SCREEN_INICIALIZACE[]       = "   INICIALIZACE..";
 #define ADDR_LEN 8
 const uint8_t ADRESY_CIPU[][ADDR_LEN] = { {0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8}, {0x1,0x2,0xA,0xB,0xC,0xD,0xE,0xF},
 {0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7}, {0x9,0x8,0x7,0x6,0x5,0x4,0x3,0x2}, {0x5,0x5,0x5,0x5,0x6,0x6,0x6,0x6}};
-#define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
+//#define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
+#define POCET_CIPU 50
+
 volatile uint8_t  KONTROLNI_SOUCTY[POCET_CIPU]; //kontrolni soucty adres pro rychlejsi vyhledavani
 
 volatile uint16_t AKTUALNI_IMPULZY[POCET_CIPU]; //aktualne vytocene impulzy od posledni zmeny ceny piva (nebo od zacatku)
@@ -125,6 +127,7 @@ volatile uint8_t timerDisplay;
 #define DISP_SIZE 43 //2x20 + jden znak na kazdej radek + 1 na zalomeni
 volatile char displej_text[DISP_SIZE];
 
+void main() __attribute__ ((noreturn));
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
@@ -340,7 +343,9 @@ void SaveData(void)
 	eeprom_update_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_MSB, (*p16).msb);
 
 	//cyklujeme pres vsechny cipy
-	uint8_t adresa = ADRESA_EE_CIPY_START;
+	uint32_t *adresa;
+	adresa = (uint32_t*)ADRESA_EE_CIPY_START;
+
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
 		//nejdriv musime presunout vsechno do akumulovanych impulzu
@@ -388,7 +393,9 @@ void LoadData(void)
 	if (((*p16).lsb == 255) and ((*p16).msb == 255)) IMPULZY_NA_LITR = 300; //jen pro prvni nacteni cerstve eepromky
 
 	//cykluj pres vsechny cipy a nacti jejich ulozena data
-	uint8_t adresa = ADRESA_EE_CIPY_START;
+	uint32_t *adresa;
+	adresa = (uint32_t*)ADRESA_EE_CIPY_START;
+
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
 		eep_dword.uint_long = eeprom_read_dword((uint32_t*)adresa);
@@ -557,7 +564,7 @@ void PrectiCip(void)
 //======================================================
 //======================================================
 //======================================================
-int main (void)
+void main (void)
 {
 	sprintf((char *)displej_text, SCREEN_INICIALIZACE);
 
@@ -657,6 +664,5 @@ int main (void)
 	}
 
 	SaveData();
-	return(0);
 }
 

@@ -8,7 +8,6 @@ TARGET = pivotoc.elf
 #CESTA="C:/WinAVR-20100110\\bin\\"
 CESTA =
 
-#CC = $(CESTA)avr-gcc
 CC = $(CESTA)avr-c++
 CPP = $(CESTA)avr-c++
 
@@ -21,7 +20,8 @@ CFLAGS += -ffreestanding
 CFLAGS += -fno-tree-scev-cprop
 CFLAGS += -mcall-prologues 
 CFLAGS += -fno-jump-tables
-CFLAGS += -std=gnu99 -Wall -gdwarf-2 -g -DF_CPU=16000000UL -O1 
+#CFLAGS += -std=gnu99
+CFLAGS += -Wall -gdwarf-2 -g -DF_CPU=16000000UL -O1 
 CFLAGS += -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums
 CFLAGS += -fdata-sections -ffunction-sections
 #CFLAGS += -MD -MP -MT $(*F).o -MF dep/$(@F).d 
@@ -53,7 +53,7 @@ INCLUDES =
 LIBDIRS = 
 
 ## Objects that must be built in order to link
-OBJECTS = pivotoc_main.o
+OBJECTS = pivotoc_main.o onewire.o
 
 ## Objects explicitly added by the user
 LIBS = -lprintf_flt -lm
@@ -65,8 +65,11 @@ touch:
 	touch pivotoc_main.cpp
 	
 ## Compile
-pivotoc.o: pivotoc_main.cpp
+%.o: %.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
+
+%.o: %.cpp
+	$(CPP) $(INCLUDES) $(CFLAGS) -c  $<
 
 ##Link
 $(TARGET): $(OBJECTS)
@@ -92,4 +95,5 @@ clean:
 
 ## Other dependencies
 #-include $(shell mkdir dep 2>NUL) $(wildcard dep/*)
+
 

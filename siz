@@ -1,8 +1,11 @@
 #!/bin/bash
 
-/usr/local/CrossPack-AVR/bin/avr-gcc onewire.c pivotoc_main.cpp -Wall -std=gnu99 -gdwarf-2 -DCOMPILE_AVR -DF_CPU=16000000UL -O1 -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums -MD -MP -MT -fdata-sections -ffunction-sections -mmcu=atmega328p -o pivotoc.a
+#CESTA=/usr/local/CrossPack-AVR/bin/
+CESTA= 
 
-/usr/local/CrossPack-AVR/bin/avr-size --mcu=atmega328p --format=avr pivotoc.a
+$(CESTA)avr-gcc onewire.c pivotoc_main.cpp -Wall -std=gnu99 -gdwarf-2 -DCOMPILE_AVR -DF_CPU=16000000UL -O1 -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums -MD -MP -MT -fdata-sections -ffunction-sections -mmcu=atmega328p -o pivotoc.a
 
-/usr/local/CrossPack-AVR/bin/avr-objdump -S -h pivotoc.a > pivotoc.lss
+$(CESTA)avr-size --mcu=atmega328p --format=avr pivotoc.a
+
+$(CESTA)avr-objdump -S -h pivotoc.a > pivotoc.lss
 
