@@ -213,6 +213,10 @@ void PosliDataNaUart(void)
 	uint8_t volatile sendBuff[6];
 	IntUnion_t volatile *p16;
 
+	//posleme hlavicku [znak 254, pocet cipu, velikost dat jednoho cipu]
+	uint8_t hlavicka[] = {254, POCET_CIPU, sizeof(sendBuff)};
+	USART_Transmit((char*)hlavicka, sizeof(hlavicka));
+
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
 		p16 = (IntUnion_t*)&AKTUALNI_IMPULZY[cip];
