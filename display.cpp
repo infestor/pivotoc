@@ -69,8 +69,8 @@ uint8_t DisplayFrontaPop(void)
 //======================================================
 void ZobrazInfoCipSprava(uint8_t id)
 {
-	double litru = double(AKUMULOVANE_IMPULZY[id] + AKTUALNI_IMPULZY[id]) / IMPULZY_NA_LITR;
-	uint16_t cena = (AKTUALNI_IMPULZY[id] * CENA_ZA_IMPULZ * 100) + AKUMULOVANA_CENA[id]; //je to na halire
+	double litru = double(AKUMULOVANE_IMPULZY[id] + AKTUALNI_IMPULZY[id] + IMPULZ_COUNTER) / IMPULZY_NA_LITR;
+	uint16_t cena = ((AKTUALNI_IMPULZY[id] + IMPULZ_COUNTER) * CENA_ZA_IMPULZ * 100) + AKUMULOVANA_CENA[id]; //je to na halire
 
 	//cena total je v korunach a zaokrouhluje se nahoru
 	uint16_t cena_total = (cena / 100);

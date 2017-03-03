@@ -73,6 +73,7 @@ typedef union {
 #define TIMER_1SEC 100
 #define PRIHLASENI_TIMEOUT 30*TIMER_1SEC
 #define CTENI_CIPU_TIMEOUT TIMER_1SEC/2
+#define CTENI_TLACITEK_TIMEOUT 1
 
 #define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
 //#define POCET_CIPU 50
@@ -86,7 +87,7 @@ volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU]; //cena je v halirich!!
 volatile uint16_t CELKOVE_IMPULZY;
 volatile uint8_t  CENA_PIVA;
 volatile uint16_t IMPULZY_NA_LITR;
-volatile double    CENA_ZA_IMPULZ;
+volatile double   CENA_ZA_IMPULZ;
 
 volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
@@ -99,7 +100,10 @@ volatile uint8_t  timerCteniCipu;
 volatile uint8_t  bylTimer;
 
 volatile uint8_t  aktualni_stav;
+volatile uint8_t  sprava_substav;
 volatile uint8_t  tlacitka_minule;
+volatile uint8_t  tlacitka_valid;
+volatile uint8_t  timerTlacitka;
 
 //promenne spojene s obsluhou UART
 #define UART_BUFF_MAX_LEN 4 //musi se do nej vejit prijmout retezec DATA
@@ -493,7 +497,7 @@ void main (void)
 {
 	DisplayFrontaAdd(DISP_STAV_INICIALIZACE);
 	display_posledni_stav = DISP_STAV_INICIALIZACE;
-	sprintf((char *)displej_text, SCREEN_INICIALIZACE);
+	//sprintf((char *)displej_text, SCREEN_INICIALIZACE);
 
 	LoadData();
 	SpocitatKontrolniSoucty();
@@ -543,6 +547,7 @@ void main (void)
 			if (timerCteniCipu > 0) timerCteniCipu--;
 			if (timerDisplay > 0) timerDisplay--;
 			if (timerUart > 0) timerUart--;
+			if (timerTlacitka > 0) timerTlacitka--;
 		}
 
 		//kontrola aktualniho stavu polohy klice vytoc/sprava
@@ -564,6 +569,29 @@ void main (void)
 
 			aktualni_stav = STAV_KLICE;
 			refresh_display = true;
+		}
+
+		//kontrola stavu stisku tlacitek
+		if (timerTlacitka == 0)
+		{
+			timerTlacitka = CTENI_TLACITEK_TIMEOUT;
+			uint8_t aktualni_stav_tlacitek = STAV_TLACITKA;
+
+			if (aktualni_stav_tlacitek != tlacitka_minule)
+			{
+				//rozlisime jestli je to zmena z nic stisknuto -> neco stisknuto
+				//nebo neco -> nic, tzn. pusteni tlacitka a tim padem nejaka akce
+				if (tlacitka_minule == 0) //nic -> neco
+				{
+					tlacitka_valid = 0;
+				}
+				else if (aktualni_stav_tlacitek == 0) //neco -> nic
+				{
+					tlacitka_valid = tlacitka_minule;
+				}
+			}
+
+			tlacitka_minule = aktualni_stav_tlacitek;
 		}
 
 		//kontrola a pripadne odhlaseni timeoutovaneho cipu
