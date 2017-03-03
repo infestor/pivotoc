@@ -4,10 +4,14 @@
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
 
-#include "onewire.h"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+
+#include "onewire.h"
+#include "adresy_cipu.h"
+#include "lcd.h"
+#include "display.h"
 
 typedef union {
 	uint16_t uint;
@@ -25,6 +29,11 @@ typedef union {
 	};
 } Int32Union_t;
 
+#define XSTR(X,Y) X ## Y
+#define PORT_BUILD(X) XSTR(PORT,X)
+#define DDR_BUILD(X) XSTR(DDR,X)
+#define PIN_BUILD(X) XSTR(PIN,X)
+
 #define ADRESA_EE_CENA_PIVA 0
 #define ADRESA_EE_IMPULZY_NA_LITR_LSB 1
 #define ADRESA_EE_IMPULZY_NA_LITR_MSB 2
@@ -36,14 +45,12 @@ typedef union {
 
 #define PIN_STAV_NORMAL 5
 #define PIN_STAV_SPRAVA 6
-#define PORT_STAV PORTB
+#define BRANA_STAV B
+#define PIN_REGISTR_STAV PIN_BUILD(BRANA_STAV)
+#define STAV_KLICE ((PIN_REGISTR_STAV & ( (1 << PIN_STAV_NORMAL) | (1 << PIN_STAV_SPRAVA) )) >> PIN_STAV_NORMAL)
 
 #define BRANA_SOLENOID D
 #define PIN_SOLENOID 5
-
-#define XSTR(X,Y) X ## Y
-#define PORT_BUILD(X) XSTR(PORT,X)
-#define DDR_BUILD(X) XSTR(DDR,X)
 
 #define PORT_SOLENOID PORT_BUILD(BRANA_SOLENOID)
 #define DDR_SOLENOID DDR_BUILD(BRANA_SOLENOID)
@@ -52,24 +59,14 @@ typedef union {
 #define SOLENOID_OFF() PORT_SOLENOID &= ~(1 << PIN_SOLENOID)
 #define SOLENOID_ON() PORT_SOLENOID |= (1 << PIN_SOLENOID)
 
+//#define IMPULZ_COUNTER_VYMAZ
+
 #define TIMER_1SEC 100
 #define PRIHLASENI_TIMEOUT 30*TIMER_1SEC
 #define CTENI_CIPU_TIMEOUT TIMER_1SEC/2
 
-const char SCREEN_ZAKLADNI[]           = " *STOPARI NYMBURK*\n      *VYCEP*";
-const char SCREEN_ZAKLADNI_SPRAVA[]    = " *STOPARI NYMBURK*\n     *SPRAVA*";
-const char SCREEN_VYCEP_ZAKAZNIK_L1[]  = "VYCEP ZAKAZNIK %02d\n";
-const char SCREEN_VYCEP_ZAKAZNIK_L2[]  = "s[l]:%2.2f nyni:%1.2f";
-const char SCREEN_SPRAVA_ZAKAZNIK[]    = "SPRAVA ZAKAZNIK %02d\ns[l]:%2.2f cena:%d,-";
-const char SCREEN_CIP_NEZNAMY[]        = " !! NEZNAMY CIP !!";
-const char SCREEN_INICIALIZACE[]       = "   INICIALIZACE..";
-
-#define ADDR_LEN 8
-const uint8_t ADRESY_CIPU[][ADDR_LEN] = { {0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8}, {0x1,0x2,0xA,0xB,0xC,0xD,0xE,0xF},
-{0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7}, {0x9,0x8,0x7,0x6,0x5,0x4,0x3,0x2}, {0x5,0x5,0x5,0x5,0x6,0x6,0x6,0x6}};
-//#define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
-#define POCET_CIPU 50
-
+#define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
+//#define POCET_CIPU 50
 volatile uint8_t  KONTROLNI_SOUCTY[POCET_CIPU]; //kontrolni soucty adres pro rychlejsi vyhledavani
 
 volatile uint16_t AKTUALNI_IMPULZY[POCET_CIPU]; //aktualne vytocene impulzy od posledni zmeny ceny piva (nebo od zacatku)
@@ -84,7 +81,7 @@ volatile float    CENA_ZA_IMPULZ;
 
 volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
-volatile uint8_t  prihlaseny_cip_adresa[ADDR_LEN];
+volatile uint8_t  prihlaseny_cip_adresa[CIP_ADDR_LEN];
 volatile uint16_t prihlaseny_cip_impulzy;
 volatile uint16_t prihlaseny_cip_timeout;
 
@@ -106,85 +103,15 @@ volatile uint8_t timerUart;
 //tady jsou potrebne definice k fungovani a praci s displejem
 volatile uint8_t  refresh_display;
 
-enum MozneStavyDispleje {
-	DISP_STAV_NIC = 0,
-	DISP_STAV_ZAKLADNI,
-	DISP_STAV_ZAKLADNI_SPRAVA,
-	DISP_STAV_INICIALIZACE,
-	DISP_STAV_NEZNAMY_CIP,
-	DISP_STAV_VYCEP_ZAKAZNIK_FULL,
-	DISP_STAV_VYCEP_ZAKAZNIK_LITRY,
-	DISP_STAV_SPRAVA_ZAKAZNIK
-};
-
-#define DISPLAY_FRONTA_MAXLEN 5
 #define DISPLAY_REFRESH_TIME TIMER_1SEC*2
-volatile uint8_t display_fronta[DISPLAY_FRONTA_MAXLEN];
-volatile uint8_t display_fronta_len;
-volatile uint8_t display_posledni_stav;
+extern volatile uint8_t display_posledni_stav;
 volatile uint8_t timerDisplay;
-
-#define DISP_SIZE 43 //2x20 + jden znak na kazdej radek + 1 na zalomeni
-volatile char displej_text[DISP_SIZE];
+//volatile char displej_text[DISP_SIZE];
 
 void main() __attribute__ ((noreturn));
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-void DisplayFrontaAdd(uint8_t novy_stav)
-{
-	//pridame stav na konec pole (doufam ze nenastane pripad, aby se pole nekdy preplnilo)
-	//to pak nevim jestli je lepci diskardovat prvni a nebo posledni polozku
-	//ted se holt kdyztak nahradi dycky ta posledni
-	display_fronta[display_fronta_len] = novy_stav;
-	display_fronta_len++;
-	if (display_fronta_len == DISPLAY_FRONTA_MAXLEN) display_fronta_len--;
-}
-
-//======================================================
-void DisplayFrontaPush(uint8_t novy_stav)
-{
-	//vlozime stav na uplny zacatek pole - bude pri refreshi hned zobrazen (prednostni funkce)
-
-	//posuneme vsechny polozky, ale musime jit odzadu
-	for (uint8_t i = display_fronta_len; i > 0; i--)
-	{
-		display_fronta[i] = display_fronta[i-1];
-	}
-
-	display_fronta[0] = novy_stav;
-	display_fronta_len++;
-	if (display_fronta_len == DISPLAY_FRONTA_MAXLEN) display_fronta_len--;
-}
-
-//======================================================
-uint8_t DisplayFrontaPop(void)
-{
-	//vratime stav na pozici 0 a cele pole pak posuneme o jednu niz cimz se puvodni nulova pozice prepise
-	//a nakonec jednu nulu vlozime
-
-	//asi muzem rict, ze kdyz je pole prazdne, vracime automaticky stav NIC
-	if (display_fronta_len == 0) return DISP_STAV_NIC;
-
-	uint8_t vratit = display_fronta[0];
-	for (uint8_t i=0; i < display_fronta_len; i++)
-	{
-		display_fronta[i] = display_fronta[i+1];
-	}
-
-	display_fronta[display_fronta_len] = DISP_STAV_NIC;
-	display_fronta_len--;
-
-	return vratit;
-}
-
-//======================================================
-void PrekreslitDisplay(uint8_t novy_stav)
-{
-
-}
-
-//======================================================
 void SetRegisters(void)
 {
 	//configure uart0  (57600, 8bits, no parity, 1 stop bit)
@@ -200,6 +127,11 @@ void SetRegisters(void)
 	TCCR0A = 2;
 	TCCR0B = 5;
 	TIMSK0 = 2;
+
+	//timer 1 jako citac impulzu - tzn. zdroj impulzu bude fyzicky pin
+	OCR1A = 0;
+	TIMSK1 = 0;
+	TCCR1A = 0;
 
 	//disable unused peripherials
 	//PRR = ( _BV(PRTWI) | _BV(PRTIM1) | _BV(PRTIM2) ) ;
@@ -227,7 +159,6 @@ ISR(USART_RX_vect)
 		if (inp == 254)
 		{
 			uartIncoming = 1;
-			//uartBufEmpty = 1;
 			uartPos = 0;
 			timerUart = UART_TIMEOUT;
 		}
@@ -261,23 +192,27 @@ ISR(BADISR_vect) { //just for case
 //======================================================
 // posle raw data z poli primo na uart
 // zadne prepocitavani se nekona
-// proste jen vezme akumulovanou cenu a secte normalni a akumulovane impulzy a posle to
+// proste jen vezme akumulovanou cenu, normalni a akumulovane impulzy a posle to v cyklu za kazdy cip
 void PosliDataNaUart(void)
 {
-	uint8_t sendBuff[4];
-	IntUnion_t uni;
-	IntUnion_t *p16;
+	uint8_t volatile sendBuff[6];
+	IntUnion_t volatile *p16;
 
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
-		uni.uint = AKTUALNI_IMPULZY[cip] + AKUMULOVANE_IMPULZY[cip];
-		sendBuff[0] = uni.lsb;
-		sendBuff[1] = uni.msb;
-		p16 = (IntUnion_t*)&AKUMULOVANA_CENA[cip];
-		sendBuff[3] = (*p16).lsb;
-		sendBuff[4] = (*p16).msb;
+		p16 = (IntUnion_t*)&AKTUALNI_IMPULZY[cip];
+		sendBuff[0] = (*p16).lsb;
+		sendBuff[1] = (*p16).msb;
 
-		USART_Transmit((char *)sendBuff, 4);
+		p16 = (IntUnion_t*)&AKUMULOVANE_IMPULZY[cip];
+		sendBuff[2] = (*p16).lsb;
+		sendBuff[3] = (*p16).msb;
+
+		p16 = (IntUnion_t*)&AKUMULOVANA_CENA[cip];
+		sendBuff[4] = (*p16).lsb;
+		sendBuff[5] = (*p16).msb;
+
+		USART_Transmit((char *)sendBuff, sizeof(sendBuff));
 	}
 }
 
@@ -368,6 +303,9 @@ void SaveData(void)
 }
 
 //======================================================
+// nacte konfiguraci a ulozena data z EEPROM
+// zaprve cenu piva a prutokomerovy pocet impulzu na 1 litr
+// zadruhe zaloha celkove spotreby jednotlivych cipu
 void LoadData(void)
 {
 	IntUnion_t volatile *p16;
@@ -420,7 +358,7 @@ void LoadData(void)
 }
 
 //======================================================
-uint8_t KontrolniSoucet(const uint8_t adresa[ADDR_LEN])
+uint8_t KontrolniSoucet(const uint8_t adresa[CIP_ADDR_LEN])
 {
 	//cykluj pres vsecky znaky adresy cipu
 	uint8_t kontrolni_soucet = 0;
@@ -443,7 +381,7 @@ inline void SpocitatKontrolniSoucty(void)
 }
 
 //======================================================
-uint8_t NajdiCip(const uint8_t adresa[ADDR_LEN])
+uint8_t NajdiCip(const uint8_t adresa[CIP_ADDR_LEN])
 {
 	uint8_t kontrolni_soucet = KontrolniSoucet(adresa);
 	uint8_t cip;
@@ -480,33 +418,6 @@ uint8_t NajdiCip(const uint8_t adresa[ADDR_LEN])
 }
 
 //======================================================
-void ZobrazInfoCipSprava(uint8_t id)
-{
-	float litru = float(AKUMULOVANE_IMPULZY[id] + AKTUALNI_IMPULZY[id]) / IMPULZY_NA_LITR;
-	uint16_t cena = (AKTUALNI_IMPULZY[id] * CENA_ZA_IMPULZ * 100) + AKUMULOVANA_CENA[id]; //je to na halire
-
-	//cena total je v korunach a zaokrouhluje se nahoru
-	uint16_t cena_total = (cena / 100);
-	if ((cena % 100) > 0) cena_total++;
-
-	printf(SCREEN_SPRAVA_ZAKAZNIK, id+1, litru, cena_total);
-}
-
-//======================================================
-void ZobrazInfoCipVytoc(uint8_t id, bool both)
-{
-	float litru = float(AKUMULOVANE_IMPULZY[id] + AKTUALNI_IMPULZY[id]) / IMPULZY_NA_LITR;
-	float nyni = float(prihlaseny_cip_impulzy) / IMPULZY_NA_LITR;
-
-	if (both == true)
-	{
-		printf(SCREEN_VYCEP_ZAKAZNIK_L1, id+1);
-	}
-
-	printf(SCREEN_VYCEP_ZAKAZNIK_L2, litru, nyni);
-}
-
-//======================================================
 void OdhlasCip(void)
 {
 	je_prihlaseno = false;
@@ -536,7 +447,7 @@ void PrectiCip(void)
 			if ((je_prihlaseno == true) && (prihlaseny_cip_id == nalezeny_cip))
 			{
 				//cip je stejny - takze ho jen odhlasime
-				//TODO - mozna bude lepci misto odhlasovani prodlouzitrefreshovat timeout
+				//TODO - mozna bude lepci misto odhlasovani refreshovat timeout
 				OdhlasCip();
 			}
 			else
@@ -553,7 +464,8 @@ void PrectiCip(void)
 		// Tento cip nemame v databazi, takze vypiseme hlasku
 		else
 		{
-			sprintf((char *)displej_text, SCREEN_CIP_NEZNAMY);
+			DisplayFrontaPush(DISP_STAV_NEZNAMY_CIP);
+			//sprintf((char *)displej_text, SCREEN_CIP_NEZNAMY);
 		}
 		
 		refresh_display = true;
@@ -566,17 +478,18 @@ void PrectiCip(void)
 //======================================================
 void main (void)
 {
-	sprintf((char *)displej_text, SCREEN_INICIALIZACE);
+	DisplayFrontaAdd(DISP_STAV_INICIALIZACE);
+	display_posledni_stav = DISP_STAV_INICIALIZACE;
+	//sprintf((char *)displej_text, SCREEN_INICIALIZACE);
 
 	LoadData();
 	SpocitatKontrolniSoucty();
 	SetRegisters();
 	sei();
 
-	aktualni_stav = STAV_NORMAL;
-	display_posledni_stav = DISP_STAV_INICIALIZACE;
+	aktualni_stav = STAV_OFF;
 	//sprintf((char *)displej_text, SCREEN_ZAKLADNI);
-	DisplayFrontaAdd(DISP_STAV_ZAKLADNI);	
+	DisplayFrontaAdd(DISP_STAV_ZAKLADNI);
 	refresh_display = true;
 
 #ifdef DEBUG_ON_PC
@@ -617,6 +530,21 @@ void main (void)
 			if (timerCteniCipu > 0) timerCteniCipu--;
 			if (timerDisplay > 0) timerDisplay--;
 			if (timerUart > 0) timerUart--;
+		}
+
+		//kontrola aktualniho stavu polohy klice vytoc/sprava
+		if (STAV_KLICE != aktualni_stav)
+		{
+			if (STAV_KLICE == STAV_NORMAL)
+			{
+			}
+			else if (STAV_KLICE == STAV_SPRAVA)
+			{
+
+			}
+
+			aktualni_stav = STAV_KLICE;
+			refresh_display = true;
 		}
 
 		//kontrola a pripadne odhlaseni timeoutovaneho cipu
