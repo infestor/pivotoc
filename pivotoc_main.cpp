@@ -39,18 +39,29 @@ typedef union {
 #define ADRESA_EE_IMPULZY_NA_LITR_MSB 2
 #define ADRESA_EE_CIPY_START 3
 
-#define STAV_OFF    0
-#define STAV_NORMAL 1
-#define STAV_SPRAVA 2
-
-#define PIN_STAV_NORMAL 5
-#define PIN_STAV_SPRAVA 6
-#define BRANA_STAV B
+#define PIN_STAV_NORMAL 2
+#define PIN_STAV_SPRAVA 3
+#define BRANA_STAV D
 #define PIN_REGISTR_STAV PIN_BUILD(BRANA_STAV)
-#define STAV_KLICE ((PIN_REGISTR_STAV & ( (1 << PIN_STAV_NORMAL) | (1 << PIN_STAV_SPRAVA) )) >> PIN_STAV_NORMAL)
+#define STAV_KLICE ((PIN_REGISTR_STAV & ( (1 << PIN_STAV_NORMAL) | (1 << PIN_STAV_SPRAVA) )) )
+
+#define STAV_OFF    0
+#define STAV_NORMAL (1 << PIN_STAV_NORMAL)
+#define STAV_SPRAVA (1 << PIN_STAV_SPRAVA)
+
+#define BRANA_TLACITKA C
+#define PIN_TLACITKO_UP 0
+#define PIN_TLACITKO_DN 1
+#define PIN_TLACITKO_DEL 2
+#define PIN_REGISTR_TLACITKA PIN_BUILD(BRANA_TLACITKA)
+#define STAV_TLACITKA ((PIN_REGISTR_TLACITKA & ( (1 << PIN_TLACITKO_UP) | (1 << PIN_TLACITKO_DN) | (1 << PIN_TLACITKO_DEL) )) )
 
 #define BRANA_SOLENOID D
-#define PIN_SOLENOID 5
+#define PIN_SOLENOID 6
+
+#define BRANA_IMPULZY D //pin T1
+#define PIN_IMPULZY 5
+#define IMPULZ_COUNTER TCNT1
 
 #define PORT_SOLENOID PORT_BUILD(BRANA_SOLENOID)
 #define DDR_SOLENOID DDR_BUILD(BRANA_SOLENOID)
@@ -58,8 +69,6 @@ typedef union {
 #define SOLENOID_TO_OUTPUT DDR_SOLENOID |= (1 << PIN_SOLENOID)
 #define SOLENOID_OFF() PORT_SOLENOID &= ~(1 << PIN_SOLENOID)
 #define SOLENOID_ON() PORT_SOLENOID |= (1 << PIN_SOLENOID)
-
-//#define IMPULZ_COUNTER_VYMAZ
 
 #define TIMER_1SEC 100
 #define PRIHLASENI_TIMEOUT 30*TIMER_1SEC
@@ -77,7 +86,7 @@ volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU]; //cena je v halirich!!
 volatile uint16_t CELKOVE_IMPULZY;
 volatile uint8_t  CENA_PIVA;
 volatile uint16_t IMPULZY_NA_LITR;
-volatile float    CENA_ZA_IMPULZ;
+volatile double    CENA_ZA_IMPULZ;
 
 volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
@@ -106,7 +115,6 @@ volatile uint8_t  refresh_display;
 #define DISPLAY_REFRESH_TIME TIMER_1SEC*2
 extern volatile uint8_t display_posledni_stav;
 volatile uint8_t timerDisplay;
-//volatile char displej_text[DISP_SIZE];
 
 void main() __attribute__ ((noreturn));
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -130,8 +138,11 @@ void SetRegisters(void)
 
 	//timer 1 jako citac impulzu - tzn. zdroj impulzu bude fyzicky pin
 	OCR1A = 0;
+	OCR1B = 0;
 	TIMSK1 = 0;
-	TCCR1A = 0;
+	TCCR1A = 0; //normal operation, no compare match, no pwm out
+	TCCR1B = _BV(ICNC1) | _BV(CS12) | _BV(CS11);
+	TCNT1 = 0;
 
 	//disable unused peripherials
 	//PRR = ( _BV(PRTWI) | _BV(PRTIM1) | _BV(PRTIM2) ) ;
@@ -262,7 +273,7 @@ void ZmenCenu(uint16_t nova_cena)
 	//a ted nastavime novou cenu piva
 	CENA_PIVA = nova_cena;
 	//nova cena piva na impulz
-	CENA_ZA_IMPULZ = float(2 * CENA_PIVA) / IMPULZY_NA_LITR;
+	CENA_ZA_IMPULZ = double(2 * CENA_PIVA) / IMPULZY_NA_LITR;
 }
 
 //======================================================
@@ -354,7 +365,7 @@ void LoadData(void)
 	}
 
 	//cena piva na impulz
-	CENA_ZA_IMPULZ = float(2 * CENA_PIVA) / IMPULZY_NA_LITR;
+	CENA_ZA_IMPULZ = double(2 * CENA_PIVA) / IMPULZY_NA_LITR;
 }
 
 //======================================================
@@ -421,6 +432,7 @@ uint8_t NajdiCip(const uint8_t adresa[CIP_ADDR_LEN])
 void OdhlasCip(void)
 {
 	je_prihlaseno = false;
+	AKTUALNI_IMPULZY[prihlaseny_cip_id] += IMPULZ_COUNTER;
 	prihlaseny_cip_id = 255;
 	prihlaseny_cip_timeout = 0;
 	prihlaseny_cip_impulzy = 0;
@@ -447,7 +459,7 @@ void PrectiCip(void)
 			if ((je_prihlaseno == true) && (prihlaseny_cip_id == nalezeny_cip))
 			{
 				//cip je stejny - takze ho jen odhlasime
-				//TODO - mozna bude lepci misto odhlasovani refreshovat timeout
+				//TODO - mozna bude lepci misto odhlasovani zkratit logout timeout na 0
 				OdhlasCip();
 			}
 			else
@@ -458,6 +470,7 @@ void PrectiCip(void)
 				prihlaseny_cip_timeout = PRIHLASENI_TIMEOUT;
 				prihlaseny_cip_impulzy = 0;
 				SOLENOID_ON();
+				IMPULZ_COUNTER = 0;
 				ZobrazInfoCipVytoc(prihlaseny_cip_id, true);
 			}
 		}
@@ -542,6 +555,12 @@ void main (void)
 			{
 
 			}
+			else
+			{
+				//pokud by se to dostalo sem, znamena to ze klic aktivoval obe polohy zaroven, coz je blbost
+				//takze tezko jestli tuhle variantu vubec nejak resit a presouvat kvuli tomu
+				//to co je tu pod zavorkou nahoru do samostatnyho if a elseif
+			}
 
 			aktualni_stav = STAV_KLICE;
 			refresh_display = true;
@@ -583,9 +602,21 @@ void main (void)
 			timerDisplay = DISPLAY_REFRESH_TIME;
 
 			uint8_t novy_stav = DisplayFrontaPop();
-			//prekreslovat jen jestli je v poli neco jineho nez prazdno
-			//jinak pouzijem minuly screen
-			if (novy_stav == DISP_STAV_NIC) novy_stav = display_posledni_stav;
+			//pokud je v poli neco jineho nez prazdno, tak je to jasny
+			//a kdyz tam prazdno je - tak je jasny, ze tam dame screen podle aktualniho stavu
+			if (novy_stav == DISP_STAV_NIC)
+			{
+				if (aktualni_stav == STAV_NORMAL)
+				{
+					if (je_prihlaseno) novy_stav = DISP_STAV_VYCEP_ZAKAZNIK_FULL; else novy_stav = DISP_STAV_ZAKLADNI;
+				}
+				else if (aktualni_stav == STAV_SPRAVA)
+				{
+					// TODO: jeste nejak poresit jak delit zobrazeni cele spravy (menu, zakaznici apod)
+					// mozna vymyslet nejakej sub-stav a podle toho si to bude rozhodovat primo az kreslici funkce
+					novy_stav = DISP_STAV_ZAKLADNI_SPRAVA;
+				}
+			}
 			PrekreslitDisplay(novy_stav);
 			refresh_display = false;
 		}
