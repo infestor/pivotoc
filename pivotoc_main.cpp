@@ -493,7 +493,7 @@ void main (void)
 {
 	DisplayFrontaAdd(DISP_STAV_INICIALIZACE);
 	display_posledni_stav = DISP_STAV_INICIALIZACE;
-	//sprintf((char *)displej_text, SCREEN_INICIALIZACE);
+	sprintf((char *)displej_text, SCREEN_INICIALIZACE);
 
 	LoadData();
 	SpocitatKontrolniSoucty();

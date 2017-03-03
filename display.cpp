@@ -1,5 +1,7 @@
+#include <stdio.h>
 #include "avr/io.h"
 #include "display.h"
+#include "lcd.h"
 
 #define IMPULZ_COUNTER TCNT1
 
@@ -7,6 +9,15 @@ volatile uint8_t display_fronta[DISPLAY_FRONTA_MAXLEN];
 volatile uint8_t display_fronta_len;
 volatile uint8_t display_posledni_stav;
 volatile char displej_text[DISP_SIZE];
+
+extern volatile uint16_t IMPULZY_NA_LITR;
+extern volatile double    CENA_ZA_IMPULZ;
+
+#define POCET_CIPU 5 //TODO: nejak to postelovat jinak aby se to propagovalo z adresy_cipu.h a ne takle prasacky
+
+extern volatile uint16_t AKTUALNI_IMPULZY[POCET_CIPU];
+extern volatile uint16_t AKUMULOVANE_IMPULZY[POCET_CIPU];
+extern volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU];
 
 void DisplayFrontaAdd(uint8_t novy_stav)
 {
@@ -85,5 +96,5 @@ void ZobrazInfoCipVytoc(uint8_t id, bool both=true)
 //======================================================
 void PrekreslitDisplay(uint8_t novy_stav)
 {
-	LCDputs((char *)displej_text);
+	//LCDputs((char *)displej_text);
 }
