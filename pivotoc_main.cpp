@@ -71,9 +71,10 @@ typedef union {
 #define SOLENOID_ON() PORT_SOLENOID |= (1 << PIN_SOLENOID)
 
 #define TIMER_1SEC 100
-#define PRIHLASENI_TIMEOUT 30*TIMER_1SEC
-#define CTENI_CIPU_TIMEOUT TIMER_1SEC/2
+#define PRIHLASENI_TIMEOUT 30 * TIMER_1SEC
+#define CTENI_CIPU_TIMEOUT TIMER_1SEC / 2
 #define CTENI_TLACITEK_TIMEOUT 1
+#define TLACITKA_DLOUHY_STISK TIMER_1SEC * 2
 
 #define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
 //#define POCET_CIPU 50
@@ -104,6 +105,7 @@ volatile uint8_t  sprava_substav;
 volatile uint8_t  tlacitka_minule;
 volatile uint8_t  tlacitka_valid;
 volatile uint8_t  timerTlacitka;
+volatile uint8_t  tlacitka_long_timer;
 
 //promenne spojene s obsluhou UART
 #define UART_BUFF_MAX_LEN 4 //musi se do nej vejit prijmout retezec DATA
@@ -116,7 +118,7 @@ volatile uint8_t timerUart;
 //tady jsou potrebne definice k fungovani a praci s displejem
 volatile uint8_t  refresh_display;
 
-#define DISPLAY_REFRESH_TIME TIMER_1SEC*2
+#define DISPLAY_REFRESH_TIME TIMER_1SEC * 2
 extern volatile uint8_t display_posledni_stav;
 volatile uint8_t timerDisplay;
 
@@ -587,12 +589,23 @@ void main (void)
 				//nebo neco -> nic, tzn. pusteni tlacitka a tim padem nejaka akce
 				if (tlacitka_minule == 0) //nic -> neco
 				{
+					//zaciname novym stiskem tak si vsecko vynulujeme
 					tlacitka_valid = 0;
+					tlacitka_long_timer = 0;
 				}
 				else if (aktualni_stav_tlacitek == 0) //neco -> nic
 				{
-					tlacitka_valid = tlacitka_minule;
+					//uz neni nic zmacknuto, zrejme neni potreba delat vubec nic
+					//protoze akce uz se udelala kdyz bylo tlacitko stisknuto
+					//po dobu dvou pruchodu tady tudy
 				}
+			}
+			else if (aktualni_stav_tlacitek != 0) //drzeni stejneho/stejnych tlacitek
+			{
+				 //inkrementace timeru pro aktivaci funkce pro dlouhy stisk
+				if (tlacitka_long_timer < TLACITKA_DLOUHY_STISK) tlacitka_long_timer++;
+
+
 			}
 
 			tlacitka_minule = aktualni_stav_tlacitek;
