@@ -53,7 +53,7 @@ INCLUDES =
 LIBDIRS = 
 
 ## Objects that must be built in order to link
-OBJECTS = pivotoc_main.o onewire.o lcd.o adresy_cipu.o
+OBJECTS = adresy_cipu.o lcd.o onewire.o pivotoc_main.o display.o
 
 ## Objects explicitly added by the user
 LIBS = -lprintf_flt -lm
