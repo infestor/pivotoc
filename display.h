@@ -3,6 +3,7 @@
 
 enum MozneStavyDispleje {
 	DISP_STAV_NIC = 0,
+	DISP_STAV_OFF,
 	DISP_STAV_ZAKLADNI,
 	DISP_STAV_ZAKLADNI_SPRAVA,
 	DISP_STAV_INICIALIZACE,
@@ -12,11 +13,16 @@ enum MozneStavyDispleje {
 	DISP_STAV_SPRAVA_ZAKAZNIK
 };
 
-const char SCREEN_ZAKLADNI[]           = " *STOPARI NYMBURK*\n      *VYCEP*";
+const char SCREEN_OFF[]                = " *STOPARI NYMBURK*\n    *VYPNUTO!*";
+const char SCREEN_ZAKLADNI[]           = " *STOPARI NYMBURK*\n     *VYCEP*";
 const char SCREEN_ZAKLADNI_SPRAVA[]    = " *STOPARI NYMBURK*\n     *SPRAVA*";
-const char SCREEN_VYCEP_ZAKAZNIK_L1[]  = "VYCEP ZAKAZNIK %02d\n";
+
+const char SCREEN_VYCEP_ZAKAZNIK_L1[]  = "*VYCEP* ZAKAZNIK %02d";
 const char SCREEN_VYCEP_ZAKAZNIK_L2[]  = "s[l]:%2.2f nyni:%1.2f";
-const char SCREEN_SPRAVA_ZAKAZNIK[]    = "SPRAVA ZAKAZNIK %02d\ns[l]:%2.2f cena:%d,-";
+
+const char SCREEN_SPRAVA_ZAKAZNIK[]    = "*SPRAVA* ZAKAZNIK %02d\ns[l]:%2.3f KC:%d";
+const char SCREEN_SPRAVA_CENA[]        = "*SPRAVA* KC/litr\nCena[KC]: %d";
+
 const char SCREEN_CIP_NEZNAMY[]        = " !! NEZNAMY CIP !!";
 const char SCREEN_INICIALIZACE[]       = "   INICIALIZACE..";
 

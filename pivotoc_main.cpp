@@ -49,10 +49,10 @@ typedef union {
 #define STAV_NORMAL (1 << PIN_STAV_NORMAL)
 #define STAV_SPRAVA (1 << PIN_STAV_SPRAVA)
 
-#define BRANA_TLACITKA C
-#define PIN_TLACITKO_UP 0
-#define PIN_TLACITKO_DN 1
-#define PIN_TLACITKO_DEL 2
+#define BRANA_TLACITKA B
+#define PIN_TLACITKO_UP 3
+#define PIN_TLACITKO_DN 4
+#define PIN_TLACITKO_DEL 5
 #define PIN_REGISTR_TLACITKA PIN_BUILD(BRANA_TLACITKA)
 #define STAV_TLACITKA ((PIN_REGISTR_TLACITKA & ( (1 << PIN_TLACITKO_UP) | (1 << PIN_TLACITKO_DN) | (1 << PIN_TLACITKO_DEL) )) )
 
@@ -76,7 +76,14 @@ typedef union {
 #define CTENI_TLACITEK_TIMEOUT 1
 #define TLACITKA_DLOUHY_STISK TIMER_1SEC * 2
 
-#define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
+enum SubStav_sprava {
+	ZAKLADNI = 0,
+	ZAKAZNICI,
+	CENA,
+	CIPY
+};
+
+//#define POCET_CIPU sizeof(ADRESY_CIPU) / sizeof(*ADRESY_CIPU)
 //#define POCET_CIPU 50
 volatile uint8_t  KONTROLNI_SOUCTY[POCET_CIPU]; //kontrolni soucty adres pro rychlejsi vyhledavani
 
@@ -86,7 +93,7 @@ volatile uint16_t AKUMULOVANE_IMPULZY[POCET_CIPU];
 volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU]; //cena je v halirich!!
 
 volatile uint16_t CELKOVE_IMPULZY;
-volatile uint8_t  CENA_PIVA;
+volatile uint8_t  CENA_PIVA; //je to pocet padesatihaliru!! Takze realna cena je pulka tohodle cisla (a nebo je to cena za litr :)
 volatile uint16_t IMPULZY_NA_LITR;
 volatile double   CENA_ZA_IMPULZ;
 
@@ -147,7 +154,7 @@ void SetRegisters(void)
 	OCR1B = 0;
 	TIMSK1 = 0;
 	TCCR1A = 0; //normal operation, no compare match, no pwm out
-	TCCR1B = _BV(ICNC1) | _BV(CS12) | _BV(CS11);
+	TCCR1B = _BV(ICNC1) | _BV(CS12) | _BV(CS11); //D5 = PD5, falling edge,
 	TCNT1 = 0;
 
 	//disable unused peripherials
@@ -340,6 +347,7 @@ void LoadData(void)
 	//zakaznici (kazdy ma 4 byte):
 	//3,4 - impulzy zakaznika 0
 	//5,6 - cena zakaznika 0
+	//... zakaznik 2
 	//7,8 - impulzy zakaznika 1
 	//atd...
 	//u vsech 16bit dat je prvni LSB
@@ -476,12 +484,12 @@ void PrectiCip(void)
 			{
 				//prihlasime novy (to odhlasi i stary)
 				je_prihlaseno = true;
+				IMPULZ_COUNTER = 0;
 				prihlaseny_cip_id = nalezeny_cip;
 				prihlaseny_cip_timeout = PRIHLASENI_TIMEOUT;
 				prihlaseny_cip_impulzy = 0;
 				SOLENOID_ON();
-				IMPULZ_COUNTER = 0;
-				ZobrazInfoCipVytoc(prihlaseny_cip_id, true);
+				//ZobrazInfoCipVytoc(prihlaseny_cip_id, true);
 			}
 		}
 		// Tento cip nemame v databazi, takze vypiseme hlasku
@@ -508,11 +516,12 @@ void main (void)
 	LoadData();
 	SpocitatKontrolniSoucty();
 	SetRegisters();
+	lcd_init(LCD_DISP_ON);
 	sei();
 
 	aktualni_stav = STAV_OFF;
 	//sprintf((char *)displej_text, SCREEN_ZAKLADNI);
-	DisplayFrontaAdd(DISP_STAV_ZAKLADNI);
+	//DisplayFrontaAdd(DISP_STAV_OFF);
 	refresh_display = true;
 
 #ifdef DEBUG_ON_PC
@@ -578,7 +587,8 @@ void main (void)
 		}
 
 		//kontrola stavu stisku tlacitek
-		if (timerTlacitka == 0)
+		//reagujeme na ne pouze ve stavu SPRAVA
+		if ( (timerTlacitka == 0) && (STAV_KLICE == STAV_SPRAVA) )
 		{
 			timerTlacitka = CTENI_TLACITEK_TIMEOUT;
 			uint8_t aktualni_stav_tlacitek = STAV_TLACITKA;
@@ -660,6 +670,10 @@ void main (void)
 					// TODO: jeste nejak poresit jak delit zobrazeni cele spravy (menu, zakaznici apod)
 					// mozna vymyslet nejakej sub-stav a podle toho si to bude rozhodovat primo az kreslici funkce
 					novy_stav = DISP_STAV_ZAKLADNI_SPRAVA;
+				}
+				else if (aktualni_stav == STAV_OFF)
+				{
+					novy_stav = DISP_STAV_OFF;
 				}
 			}
 			PrekreslitDisplay(novy_stav);

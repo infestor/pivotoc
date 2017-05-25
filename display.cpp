@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "avr/io.h"
+#include "adresy_cipu.h"
 #include "display.h"
 #include "lcd.h"
 
@@ -13,11 +14,12 @@ volatile char displej_text[DISP_SIZE];
 extern volatile uint16_t IMPULZY_NA_LITR;
 extern volatile double    CENA_ZA_IMPULZ;
 
-#define POCET_CIPU 5 //TODO: nejak to postelovat jinak aby se to propagovalo z adresy_cipu.h a ne takle prasacky
+//#define POCET_CIPU 5 //TODO: nejak to postelovat jinak aby se to propagovalo z adresy_cipu.h a ne takle prasacky
 
 extern volatile uint16_t AKTUALNI_IMPULZY[POCET_CIPU];
 extern volatile uint16_t AKUMULOVANE_IMPULZY[POCET_CIPU];
 extern volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU];
+extern volatile uint8_t  prihlaseny_cip_id;
 
 void DisplayFrontaAdd(uint8_t novy_stav)
 {
@@ -77,6 +79,7 @@ void ZobrazInfoCipSprava(uint8_t id)
 	if ((cena % 100) > 0) cena_total++;
 
 	sprintf((char *)displej_text, SCREEN_SPRAVA_ZAKAZNIK, id+1, litru, cena_total);
+	lcd_puts((char *)displej_text);
 }
 
 //======================================================
@@ -88,13 +91,41 @@ void ZobrazInfoCipVytoc(uint8_t id, bool both=true)
 	if (both == true)
 	{
 		sprintf((char *)displej_text, SCREEN_VYCEP_ZAKAZNIK_L1, id+1);
+		lcd_puts((char *)displej_text);
 	}
 
+	lcd_gotoxy(0, 1); //zacatek druheho radku
 	sprintf((char *)displej_text, SCREEN_VYCEP_ZAKAZNIK_L2, litru, nyni);
+	lcd_puts((char *)displej_text);
 }
 
 //======================================================
 void PrekreslitDisplay(uint8_t novy_stav)
 {
-	//LCDputs((char *)displej_text);
+	lcd_clrscr();
+
+	if (novy_stav == DISP_STAV_OFF) {
+		lcd_puts(SCREEN_OFF);
+	}
+	else if (novy_stav == DISP_STAV_INICIALIZACE) {
+		lcd_puts(SCREEN_INICIALIZACE);
+	}
+	else if (novy_stav == DISP_STAV_ZAKLADNI) {
+		lcd_puts(SCREEN_ZAKLADNI);
+	}
+	else if (novy_stav == DISP_STAV_ZAKLADNI_SPRAVA) {
+		lcd_puts(SCREEN_ZAKLADNI_SPRAVA);
+	}
+	else if (novy_stav == DISP_STAV_NEZNAMY_CIP) {
+		lcd_puts(SCREEN_CIP_NEZNAMY);
+	}
+	// pokrocile zobrazeni
+	else if (novy_stav == DISP_STAV_VYCEP_ZAKAZNIK_FULL)
+	{
+		ZobrazInfoCipVytoc(prihlaseny_cip_id);
+	}
+	else if (novy_stav == DISP_STAV_SPRAVA_ZAKAZNIK)
+	{
+		ZobrazInfoCipSprava(prihlaseny_cip_id);
+	}
 }
