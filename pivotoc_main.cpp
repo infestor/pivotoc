@@ -832,9 +832,6 @@ void main (void)
 					else if (sprava_substav == SUBSTAV_SPRAVA_CENA) {
 						novy_stav = DISP_STAV_SPRAVA_CENA;
 					}
-					else if (sprava_substav == SUBSTAV_SPRAVA_CENA_EDIT) {
-						novy_stav = DISP_STAV_SPRAVA_CENA_EDIT;
-					}
 				}
 				else if (aktualni_stav == STAV_OFF)
 				{
