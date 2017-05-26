@@ -116,7 +116,7 @@ volatile uint16_t prihlaseny_cip_timeout; //pouzije se i v rezimu ZPRAVA pro sle
 
 //volatile uint16_t longTimer;
 volatile uint8_t  timerCteniCipu;
-volatile uint8_t  bylTimer;
+volatile bool  bylTimer;
 
 volatile uint8_t  aktualni_stav;
 
@@ -138,7 +138,7 @@ volatile uint8_t  uartBuf[UART_BUFF_MAX_LEN];
 volatile uint8_t  timerUart;
 
 //tady jsou potrebne definice k fungovani a praci s displejem
-volatile uint8_t  refresh_display;
+volatile bool  refresh_display;
 
 #define DISPLAY_REFRESH_TIME TIMER_1SEC * 1
 volatile uint8_t  timerDisplay;
@@ -502,7 +502,6 @@ void PrectiCip(void)
 				prihlaseny_cip_id = nalezeny_cip;
 				prihlaseny_cip_timeout = PRIHLASENI_TIMEOUT;
 				SOLENOID_ON();
-				//ZobrazInfoCipVytoc(prihlaseny_cip_id, true);
 			}
 		}
 		// Tento cip nemame v databazi, takze vypiseme hlasku
