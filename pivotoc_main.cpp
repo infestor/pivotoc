@@ -79,7 +79,8 @@ typedef union {
 #define SOLENOID_ON() PORT_SOLENOID |= (1 << PIN_SOLENOID)
 
 #define TIMER_1SEC 100
-#define PRIHLASENI_TIMEOUT 30 * TIMER_1SEC
+#define PRIHLASENI_TIMEOUT 20 * TIMER_1SEC
+#define SPRAVA_NECINNOST_TIMEOUT 20 * TIMER_1SEC
 #define CTENI_CIPU_TIMEOUT TIMER_1SEC / 2
 #define CTENI_TLACITEK_TIMEOUT 5
 #define TLACITKA_DLOUHY_STISK TIMER_1SEC / CTENI_TLACITEK_TIMEOUT
@@ -111,7 +112,7 @@ volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
 volatile uint8_t  prihlaseny_cip_adresa[CIP_ADDR_LEN];
 volatile uint16_t prihlaseny_cip_impulzy;
-volatile uint16_t prihlaseny_cip_timeout;
+volatile uint16_t prihlaseny_cip_timeout; //pouzije se i v rezimu ZPRAVA pro sledovani necinnosti
 
 //volatile uint16_t longTimer;
 volatile uint8_t  timerCteniCipu;
@@ -612,6 +613,8 @@ void main (void)
 			}
 			else if (aktualni_stav_tlacitek != 0) //drzeni stejneho/stejnych tlacitek (stejny stav od minule)
 			{
+				prihlaseny_cip_timeout = SPRAVA_NECINNOST_TIMEOUT;
+
 				 //inkrementace timeru pro aktivaci funkce pro dlouhy stisk
 				if (tlacitka_long_timer < TLACITKA_DLOUHY_STISK)
 				{
@@ -698,7 +701,7 @@ void main (void)
 				}
 
 				refresh_display = true; //protoze sme neco udelali, musime nechat prekreslit displej
-
+				prihlaseny_cip_timeout = SPRAVA_NECINNOST_TIMEOUT;
 			}
 			else if (tlacitka_valid == TLACITKA_LONG_VALID) // ------------ LONG PRESS ------------
 			{
@@ -752,7 +755,9 @@ void main (void)
 					tlacitka_long_timer = TLACITKA_DLOUHY_STISK_RELOAD;
 					tlacitka_valid = TLACITKA_SHORT_PROCESSED;
 				}
+
 				refresh_display = true; //protoze sme neco udelali, musime nechat prekreslit displej
+				prihlaseny_cip_timeout = SPRAVA_NECINNOST_TIMEOUT;
 			}
 		}
 
@@ -763,9 +768,14 @@ void main (void)
 			if (prihlaseny_cip_timeout == 0) OdhlasCip();
 		}
 
+		if (aktualni_stav == STAV_SPRAVA)
+		{
+			if (prihlaseny_cip_timeout == 0) sprava_substav = SUBSTAV_SPRAVA_ZAKLADNI;
+		}
+
 		//=======================================================================================
 		//uz je cas zkusit jestli je prilozen cip? - ale jen ve stavu VYCEP
-		if ( (timerCteniCipu == 0) && (aktualni_stav = STAV_NORMAL) )
+		if ( (timerCteniCipu == 0) && (aktualni_stav == STAV_NORMAL) )
 		{
 			timerCteniCipu = CTENI_CIPU_TIMEOUT;
 			PrectiCip();
