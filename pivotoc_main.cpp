@@ -81,9 +81,9 @@ typedef union {
 #define TIMER_1SEC 100
 #define PRIHLASENI_TIMEOUT 30 * TIMER_1SEC
 #define CTENI_CIPU_TIMEOUT TIMER_1SEC / 2
-#define CTENI_TLACITEK_TIMEOUT 4
-#define TLACITKA_DLOUHY_STISK TIMER_1SEC
-#define TLACITKA_DLOUHY_STISK_RELOAD TLACITKA_DLOUHY_STISK - 25
+#define CTENI_TLACITEK_TIMEOUT 5
+#define TLACITKA_DLOUHY_STISK TIMER_1SEC / CTENI_TLACITEK_TIMEOUT
+#define TLACITKA_DLOUHY_STISK_RELOAD TLACITKA_DLOUHY_STISK / 4
 
 enum SubStav_sprava_enum{
 	SUBSTAV_SPRAVA_ZAKLADNI = 0,
@@ -100,9 +100,9 @@ volatile uint8_t  KONTROLNI_SOUCTY[POCET_CIPU]; //kontrolni soucty adres pro ryc
 volatile uint16_t AKTUALNI_IMPULZY[POCET_CIPU]; //aktualne vytocene impulzy od posledni zmeny ceny piva (nebo od zacatku)
 //sem se presouvaji dosavadni impulzy a spocita se dosavadni cena za ty impulzy, pokud se zmeni cena piva
 volatile uint16_t AKUMULOVANE_IMPULZY[POCET_CIPU];
-volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU]; //cena je v halirich!!
+volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU]; //cena je v desitkach haliru tzn. 0.1Kc!!
 
-volatile uint16_t CELKOVE_IMPULZY;
+volatile uint32_t CELKOVE_IMPULZY;
 volatile uint8_t  CENA_PIVA; //je to pocet padesatihaliru!! Takze realna cena je pulka tohodle cisla (a nebo je to cena za litr :)
 volatile uint16_t IMPULZY_NA_LITR;
 volatile double   CENA_ZA_IMPULZ;
@@ -131,17 +131,16 @@ volatile uint8_t  tlacitka_long_timer;
 //promenne spojene s obsluhou UART
 #define UART_BUFF_MAX_LEN 4 //musi se do nej vejit prijmout retezec DATA
 #define UART_TIMEOUT TIMER_1SEC/50 //20ms
-volatile uint8_t uartIncoming;
-volatile uint8_t uartPos;
-volatile uint8_t uartBuf[UART_BUFF_MAX_LEN];
-volatile uint8_t timerUart;
+volatile uint8_t  uartIncoming;
+volatile uint8_t  uartPos;
+volatile uint8_t  uartBuf[UART_BUFF_MAX_LEN];
+volatile uint8_t  timerUart;
 
 //tady jsou potrebne definice k fungovani a praci s displejem
 volatile uint8_t  refresh_display;
 
-#define DISPLAY_REFRESH_TIME TIMER_1SEC * 2
-//extern volatile uint8_t display_posledni_stav;
-volatile uint8_t timerDisplay;
+#define DISPLAY_REFRESH_TIME TIMER_1SEC * 1
+volatile uint8_t  timerDisplay;
 
 void main() __attribute__ ((noreturn));
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -281,7 +280,7 @@ void ResetujVsechnyCipy(void)
 //======================================================
 void AkumulujCenu(uint8_t cip)
 {
-	uint16_t cena = AKTUALNI_IMPULZY[cip] * CENA_ZA_IMPULZ * 100; //je to na halire
+	uint16_t cena = AKTUALNI_IMPULZY[cip] * CENA_ZA_IMPULZ * 10; //je to na desitky haliru = 0.1kc
 	AKUMULOVANA_CENA[cip] += cena;
 	AKUMULOVANE_IMPULZY[cip] += AKTUALNI_IMPULZY[cip];
 	AKTUALNI_IMPULZY[cip] = 0;
@@ -463,13 +462,13 @@ uint8_t NajdiCip(const uint8_t adresa[CIP_ADDR_LEN])
 //======================================================
 void OdhlasCip(void)
 {
+	if (je_prihlaseno == true)
+	{
+		AKTUALNI_IMPULZY[prihlaseny_cip_id] += IMPULZ_COUNTER;
+	}
 	je_prihlaseno = false;
-	AKTUALNI_IMPULZY[prihlaseny_cip_id] += IMPULZ_COUNTER;
 	prihlaseny_cip_id = 255;
 	prihlaseny_cip_timeout = 0;
-	prihlaseny_cip_impulzy = 0;
-	//sprintf((char *)displej_text, SCREEN_ZAKLADNI);
-	//DisplayFrontaAdd(DISP_STAV_ZAKLADNI);
 	refresh_display = true;
 	SOLENOID_OFF();
 }
@@ -501,7 +500,6 @@ void PrectiCip(void)
 				IMPULZ_COUNTER = 0;
 				prihlaseny_cip_id = nalezeny_cip;
 				prihlaseny_cip_timeout = PRIHLASENI_TIMEOUT;
-				prihlaseny_cip_impulzy = 0;
 				SOLENOID_ON();
 				//ZobrazInfoCipVytoc(prihlaseny_cip_id, true);
 			}
@@ -510,7 +508,6 @@ void PrectiCip(void)
 		else
 		{
 			DisplayFrontaPush(DISP_STAV_NEZNAMY_CIP);
-			//sprintf((char *)displej_text, SCREEN_CIP_NEZNAMY);
 		}
 		
 		refresh_display = true;
@@ -537,33 +534,6 @@ void main (void)
 	//sprintf((char *)displej_text, SCREEN_ZAKLADNI);
 	//DisplayFrontaAdd(DISP_STAV_OFF);
 	refresh_display = true;
-
-#ifdef DEBUG_ON_PC
-	//debug data
-	uint8_t zak = 0;
-	AKUMULOVANE_IMPULZY[zak] = 0;
-	AKUMULOVANA_CENA[zak] = 0;
-	AKTUALNI_IMPULZY[zak] = 388;
-	prihlaseny_cip_impulzy = 132;
-
-	printf("\n|--------|---------|\n");
-	ZobrazInfoCipVytoc(zak, true);
-	printf("\n|--------|---------|\n");
-	ZobrazInfoCipSprava(zak);
-	printf("\n|--------|---------|\n\n");
-
-	ZmenCenu(40);
-
-	AKTUALNI_IMPULZY[zak] = 300;
-	prihlaseny_cip_impulzy = 150;
-
-	printf("\n|--------|---------|\n");
-	ZobrazInfoCipVytoc(zak, true);
-	printf("\n|--------|---------|\n");
-	ZobrazInfoCipSprava(zak);
-	printf("\n|--------|---------|\n\n");
-	SOLENOID_OFF();
-#endif
 
 	while(1) {
 
@@ -616,6 +586,7 @@ void main (void)
 		{
 			timerTlacitka = CTENI_TLACITEK_TIMEOUT;
 			uint8_t aktualni_stav_tlacitek = STAV_TLACITKA;
+			uint8_t valid_tlacitko;
 
 			if (aktualni_stav_tlacitek != tlacitka_minule) //stav stisku tlacitek se zmenil
 			{
@@ -629,10 +600,11 @@ void main (void)
 				}
 				else if (aktualni_stav_tlacitek == 0) //neco -> nic
 				{
-					//uz neni nic zmacknuto, zrejme neni potreba delat vubec nic
-					//protoze akce uz se udelala kdyz bylo tlacitko stisknuto
-					//po dobu dvou pruchodu tady touhle funkci (nebo spis pruchodem pro
-					//inkrementaci long_timeru)
+					//vygenerujeme separatni short press pro DEL button
+					if ((tlacitka_minule == PRESS_DEL) && (tlacitka_long_timer > 0) && (tlacitka_valid == TLACITKA_BEGIN_PRESS) ) {
+						tlacitka_valid == TLACITKA_SHORT_VALID;
+						valid_tlacitko = PRESS_DEL;
+					}
 				}
 			}
 			else if (aktualni_stav_tlacitek != 0) //drzeni stejneho/stejnych tlacitek (stejny stav od minule)
@@ -647,39 +619,29 @@ void main (void)
 					// && (tlacitka_long_timer > 1) )
 					if (tlacitka_valid == TLACITKA_BEGIN_PRESS)
 					{
-						tlacitka_valid = TLACITKA_SHORT_VALID;
+						//vygenerujeme separatni short press pro JINE NEZ DEL buttony
+						if (aktualni_stav_tlacitek != PRESS_DEL) tlacitka_valid == TLACITKA_SHORT_VALID;
 					}
 				}
 				else //zrejme uz tlactiko bylo drzeno dostatecne dlouho (long_timer je na max)
 				{
 					if (tlacitka_valid != TLACITKA_LONG_PROCESSED) tlacitka_valid = TLACITKA_LONG_VALID;
 				}
+
+				valid_tlacitko = aktualni_stav_tlacitek;
 			}
 
 			tlacitka_minule = aktualni_stav_tlacitek;
-
-			//TODO: vsecko spatne !!!!! Mixuje se long_press a short_press tam, kde by melo fungovat jen jedno - je to potreba vyresit a oddelit
-			//konkretne - jak to je ted, tak short_press se provede dycky a pak zamaskuje long_press ktery se neprovede nikdy
-			//jinak je to ok
-			//TODO: musi se to vzit nejak pres tu vetev, kde se skoci, kdyz se tlacitko pusti a ted tam neni nic,
-			//protoze se predpokladalo ze se tam uz nic dit nebude
-
 
 			//------------------------------------------------------------------------
 			//zpracovani tlacitek (asi muze byt takle soucasti STAV_SPRAVA, protoze jinde se nepouzivaji
 			if (tlacitka_valid == TLACITKA_SHORT_VALID) // -------------- SHORT PRESS -------------
 			{
-				//nastavime si vychozi stav ze SHORT_PROCESSED, ale po stisku DEL tlacitka
-				//ho jeste dodatecne upravime na LONG_PROCESSED a dame long_timer na MAX, abysme
-				//zamezili zaroven provedeni Long-press funkce, kdyby servismen tlacitko nepustil
+				//nastavime si vychozi stav ze SHORT_PROCESSED
 				tlacitka_valid = TLACITKA_SHORT_PROCESSED;
-				if (aktualni_stav_tlacitek == PRESS_DEL) {
-					tlacitka_long_timer = TLACITKA_DLOUHY_STISK;
-					tlacitka_valid = TLACITKA_LONG_PROCESSED;
-				}
 
 				if (sprava_substav == SUBSTAV_SPRAVA_ZAKLADNI) {
-					if (aktualni_stav_tlacitek == PRESS_DEL)
+					if (valid_tlacitko == PRESS_DEL)
 					{
 						//prepnout na dalsi sub-mod
 						sprava_substav = SUBSTAV_SPRAVA_ZAKAZNICI;
@@ -687,13 +649,13 @@ void main (void)
 					}
 				}
 				else if (sprava_substav == SUBSTAV_SPRAVA_ZAKAZNICI) {
-					if (aktualni_stav_tlacitek == PRESS_DEL)
+					if (valid_tlacitko == PRESS_DEL)
 					{
 						//prepnout na dalsi sub-mod
 						sprava_substav = SUBSTAV_SPRAVA_CENA;
 						sprava_temp_cena = CENA_PIVA;
 					}
-					else if (aktualni_stav_tlacitek == PRESS_UP)
+					else if (valid_tlacitko == PRESS_UP)
 					{
 						//o zakaznika vyse (tzn. ubirame index)
 						if (sprava_zobrazeny_zakaznik > 0)
@@ -705,7 +667,7 @@ void main (void)
 							sprava_zobrazeny_zakaznik = POCET_CIPU - 1;
 						}
 					}
-					else if (aktualni_stav_tlacitek == PRESS_DN)
+					else if (valid_tlacitko == PRESS_DN)
 					{
 						//o zakaznika nize (tzn. pridavame index)
 						sprava_zobrazeny_zakaznik++;
@@ -713,29 +675,36 @@ void main (void)
 					}
 				}
 				else if (sprava_substav == SUBSTAV_SPRAVA_CENA) {
-					if (aktualni_stav_tlacitek == PRESS_DEL)
+					if (valid_tlacitko == PRESS_DEL)
 					{
 						//prepnout na dalsi sub-mod
 						sprava_substav = SUBSTAV_SPRAVA_ZAKLADNI;
 					}
-					else if (aktualni_stav_tlacitek == PRESS_UP)
+					else if (valid_tlacitko == PRESS_UP)
 					{
 						//cena nahoru o 0.50Kc
 						sprava_temp_cena++;
 					}
-					else if (aktualni_stav_tlacitek == PRESS_DN)
+					else if (valid_tlacitko == PRESS_DN)
 					{
 						//cena dolu o 0.50Kc
 						if(sprava_temp_cena > 0) sprava_temp_cena--;
 					}
 				}
 
+				refresh_display = true; //protoze sme neco udelali, musime nechat prekreslit displej
+
 			}
 			else if (tlacitka_valid == TLACITKA_LONG_VALID) // ------------ LONG PRESS ------------
 			{
-				//INFO: tady neni potreba brat v potaz long press pri zakladnim zobrazeni protoze tam se nic nedeje
+				//INFO: neni potreba brat v potaz long press pri zakladnim zobrazeni protoze tam se nic nedeje
+
+				//tady dame ze long-processed, at uz to bylo jakykoli tlaciko, protoze sme to zpracovali, a dal se tim zabejvat nebudem
+				//leda ze to je up/down pro zmenu ceny a tam si to postelujeme separatne
+				tlacitka_valid = TLACITKA_LONG_PROCESSED;
+
 				if (sprava_substav == SUBSTAV_SPRAVA_ZAKAZNICI) {
-					if (aktualni_stav_tlacitek == PRESS_DEL)
+					if (valid_tlacitko == PRESS_DEL)
 					{
 						//vynulovat nastradane hodnoty zakaznika -> zaplatil
 						VynulujCip(sprava_zobrazeny_zakaznik);
@@ -745,33 +714,34 @@ void main (void)
 					//Listovani zakaznikama jde jen pomoci single-short-press
 				}
 				else if (sprava_substav == SUBSTAV_SPRAVA_CENA) {
-					if (aktualni_stav_tlacitek == PRESS_DEL)
+					if (valid_tlacitko == PRESS_DEL)
 					{
 						//ulozit novou cenu a prepocitat zakazniky
 						ZmenCenu(sprava_temp_cena);
 					}
-					else if (aktualni_stav_tlacitek == PRESS_UP)
+					else if (valid_tlacitko == PRESS_UP)
 					{
 						//cena nahoru o 0.50Kc
 						if (sprava_temp_cena < 0xFF) sprava_temp_cena++;
 						//tim ze reloadneme long_timer docilime toho, ze pro UP tlacitko se bude funkce opakovat
 						//dokud servismen tlacitko nepusti
-						tlacitka_long_timer = TLACITKA_DLOUHY_STISK_RELOAD;
 					}
-					else if (aktualni_stav_tlacitek == PRESS_DN)
+					else if (valid_tlacitko == PRESS_DN)
 					{
 						//cena dolu o 0.50Kc
 						if(sprava_temp_cena > 0) sprava_temp_cena--;
 						//tim ze reloadneme long_timer docilime toho, ze pro UP tlacitko se bude funkce opakovat
 						//dokud servismen tlacitko nepusti
-						tlacitka_long_timer = TLACITKA_DLOUHY_STISK_RELOAD;
 					}
+
+					//tady si dame fikane short-processed, i kdyz jsme procesovali long-press
+					//a to je kvuli tomu, ze potrebujeme, aby to fungovalo opakovane pri drzeni tlacitka
+					//a proto zaroven reloadujeme (snizujeme) long-timer na novou hodnotu, aby zase odpocitaval
+					tlacitka_long_timer = TLACITKA_DLOUHY_STISK_RELOAD;
+					tlacitka_valid = TLACITKA_SHORT_PROCESSED;
 				}
-
-				tlacitka_valid = TLACITKA_LONG_PROCESSED;
+				refresh_display = true; //protoze sme neco udelali, musime nechat prekreslit displej
 			}
-
-			refresh_display = true; //protoze sme neco udelali, musime nechat prekreslit displej
 		}
 
 		//=======================================================================================
@@ -782,8 +752,8 @@ void main (void)
 		}
 
 		//=======================================================================================
-		//uz je cas zkusit jestli je prilozen cip?
-		if (timerCteniCipu == 0)
+		//uz je cas zkusit jestli je prilozen cip? - ale jen ve stavu VYCEP
+		if ( (timerCteniCipu == 0) && (aktualni_stav = STAV_NORMAL) )
 		{
 			timerCteniCipu = CTENI_CIPU_TIMEOUT;
 			PrectiCip();
@@ -838,11 +808,10 @@ void main (void)
 					novy_stav = DISP_STAV_OFF;
 				}
 			}
+
 			PrekreslitDisplay(novy_stav);
 			refresh_display = false;
 		}
 	}
-
-	SaveData();
 }
 

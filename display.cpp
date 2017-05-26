@@ -8,7 +8,6 @@
 
 volatile uint8_t display_fronta[DISPLAY_FRONTA_MAXLEN];
 volatile uint8_t display_fronta_len;
-//volatile uint8_t display_posledni_stav;
 volatile char displej_text[DISP_SIZE];
 
 extern volatile uint16_t IMPULZY_NA_LITR;
@@ -78,13 +77,13 @@ uint8_t DisplayFrontaPop(void)
 void ZobrazInfoCipSprava(uint8_t id)
 {
 	//tady pozor! - nezapocitavame stav IMPULZ_COUNTER protoze ten je aktivni jen pri stavu VYTOC,
-	//tady je vsecko uz ulozeno v polich jednotlivych uzivatelu
+	//tady je vsecko uz pri prechodu na SPRAVA ulozeno v polich jednotlivych uzivatelu (po OdhlasCip)
 	double litru = double(AKUMULOVANE_IMPULZY[id] + AKTUALNI_IMPULZY[id]) / IMPULZY_NA_LITR;
-	uint16_t cena = (AKTUALNI_IMPULZY[id] * CENA_ZA_IMPULZ * 100) + AKUMULOVANA_CENA[id]; //je to na halire
+	uint16_t cena = (AKTUALNI_IMPULZY[id] * CENA_ZA_IMPULZ * 10) + AKUMULOVANA_CENA[id]; //je to na desitky haliru = 0.1kc
 
 	//cena total je v korunach a zaokrouhluje se nahoru
-	uint16_t cena_total = (cena / 100);
-	if ((cena % 100) > 0) cena_total++;
+	uint16_t cena_total = (cena / 10);
+	if ((cena % 10) > 0) cena_total++;
 
 	sprintf((char *)displej_text, SCREEN_SPRAVA_ZAKAZNIK, id+1, litru, cena_total);
 	lcd_puts((char *)displej_text);
@@ -111,12 +110,11 @@ void ZobrazInfoCipVytoc(uint8_t id, bool both=true)
 //======================================================
 void ZobrazInfoCenaEdit(void)
 {
-	//double cena = double(sprava_temp_cena) * 0.5;
 	uint8_t cena_jednotky = sprava_temp_cena / 2;
 	uint8_t cena_desetiny = (sprava_temp_cena % 2) * 5;
 
 	const char *predloha;
-	if (cena_jednotky != CENA_PIVA) {
+	if (sprava_temp_cena != CENA_PIVA) {
 		predloha = SCREEN_SPRAVA_CENA_EDIT;
 	}
 	else {
@@ -150,6 +148,7 @@ void PrekreslitDisplay(uint8_t novy_stav)
 	else if (novy_stav == DISP_STAV_NEZNAMY_CIP) {
 		lcd_puts(SCREEN_CIP_NEZNAMY);
 	}
+
 	// pokrocile zobrazeni ---------------------------------------------------
 	else if (novy_stav == DISP_STAV_VYCEP_ZAKAZNIK_FULL)
 	{
