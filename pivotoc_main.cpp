@@ -586,7 +586,7 @@ void main (void)
 		{
 			timerTlacitka = CTENI_TLACITEK_TIMEOUT;
 			uint8_t aktualni_stav_tlacitek = STAV_TLACITKA;
-			uint8_t valid_tlacitko;
+			uint8_t volatile valid_tlacitko = 0;
 
 			if (aktualni_stav_tlacitek != tlacitka_minule) //stav stisku tlacitek se zmenil
 			{
@@ -601,8 +601,11 @@ void main (void)
 				else if (aktualni_stav_tlacitek == 0) //neco -> nic
 				{
 					//vygenerujeme separatni short press pro DEL button
-					if ((tlacitka_minule == PRESS_DEL) && (tlacitka_long_timer > 0) && (tlacitka_valid == TLACITKA_BEGIN_PRESS) ) {
-						tlacitka_valid == TLACITKA_SHORT_VALID;
+					if ((tlacitka_minule == PRESS_DEL) &&
+						(tlacitka_long_timer > 0) &&
+						(tlacitka_valid == TLACITKA_BEGIN_PRESS) )
+					{
+						tlacitka_valid = TLACITKA_SHORT_VALID;
 						valid_tlacitko = PRESS_DEL;
 					}
 				}
@@ -620,7 +623,7 @@ void main (void)
 					if (tlacitka_valid == TLACITKA_BEGIN_PRESS)
 					{
 						//vygenerujeme separatni short press pro JINE NEZ DEL buttony
-						if (aktualni_stav_tlacitek != PRESS_DEL) tlacitka_valid == TLACITKA_SHORT_VALID;
+						if (aktualni_stav_tlacitek != PRESS_DEL) tlacitka_valid = TLACITKA_SHORT_VALID;
 					}
 				}
 				else //zrejme uz tlactiko bylo drzeno dostatecne dlouho (long_timer je na max)
@@ -729,7 +732,7 @@ void main (void)
 					else if (valid_tlacitko == PRESS_DN)
 					{
 						//cena dolu o 0.50Kc
-						if(sprava_temp_cena > 0) sprava_temp_cena--;
+						if (sprava_temp_cena > 0) sprava_temp_cena--;
 						//tim ze reloadneme long_timer docilime toho, ze pro UP tlacitko se bude funkce opakovat
 						//dokud servismen tlacitko nepusti
 					}
