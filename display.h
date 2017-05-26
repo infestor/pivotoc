@@ -24,6 +24,7 @@ const char SCREEN_VYCEP_ZAKAZNIK_L1[]  = "*VYCEP* ZAKAZNIK %02d";
 const char SCREEN_VYCEP_ZAKAZNIK_L2[]  = "s[l]:%2.2f nyni:%1.2f";
 
 const char SCREEN_SPRAVA_ZAKAZNIK[]    = "*SPRAVA* ZAKAZNIK %02d\ns[l]:%2.3f KC:%d";
+const char SCREEN_SPRAVA_ZAKAZNIK_SMAZAT_VSE[]    = "*SPRAVA* Nulovat vse\nStiskni dlouze DEL";
 const char SCREEN_SPRAVA_CENA[]        = "*SPRAVA*  KC/litr\nCena[KC]: %2d.%d";
 const char SCREEN_SPRAVA_CENA_EDIT[]   = "*SPRAVA*  KC/litr\nCena[KC]: %2d.%d (NEW)";
 

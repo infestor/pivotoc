@@ -156,7 +156,14 @@ void PrekreslitDisplay(uint8_t novy_stav)
 	}
 	else if (novy_stav == DISP_STAV_SPRAVA_ZAKAZNIK)
 	{
-		ZobrazInfoCipSprava(sprava_zobrazeny_zakaznik);
+		if (sprava_zobrazeny_zakaznik != POCET_CIPU)
+		{
+			ZobrazInfoCipSprava(sprava_zobrazeny_zakaznik);
+		}
+		else
+		{
+			lcd_puts(SCREEN_SPRAVA_ZAKAZNIK_SMAZAT_VSE);
+		}
 	}
 	else if (novy_stav == DISP_STAV_SPRAVA_CENA)
 	{

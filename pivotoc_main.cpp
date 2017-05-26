@@ -667,14 +667,16 @@ void main (void)
 						}
 						else
 						{
-							sprava_zobrazeny_zakaznik = POCET_CIPU - 1;
+							//cyklujeme az na hodnotu POCET_CIPU, i kdyz ve skutecnosti zakazniku je od jednoho mene
+							//protoze prave ta posledni hodnota znamena umele tvorenou polozku menu SMAZAT VSE
+							sprava_zobrazeny_zakaznik = POCET_CIPU;
 						}
 					}
 					else if (valid_tlacitko == PRESS_DN)
 					{
 						//o zakaznika nize (tzn. pridavame index)
 						sprava_zobrazeny_zakaznik++;
-						if (sprava_zobrazeny_zakaznik == POCET_CIPU) sprava_zobrazeny_zakaznik = 0;
+						if (sprava_zobrazeny_zakaznik == (POCET_CIPU + 1)) sprava_zobrazeny_zakaznik = 0;
 					}
 				}
 				else if (sprava_substav == SUBSTAV_SPRAVA_CENA) {
@@ -710,9 +712,16 @@ void main (void)
 					if (valid_tlacitko == PRESS_DEL)
 					{
 						//vynulovat nastradane hodnoty zakaznika -> zaplatil
-						VynulujCip(sprava_zobrazeny_zakaznik);
-						//tim, ze nechame long_timer na maxu, zamezime dalsimu opakovani tehle fce dokud servismen nepusti tlacitko
+						//ale jeste je potreba poznat, zda se nahodou nejedna o superpolozku SMAZAT VSE,
+						///ktera je skovana pod indexem == POCET_CIPU
+						if (sprava_zobrazeny_zakaznik != POCET_CIPU) {
+							VynulujCip(sprava_zobrazeny_zakaznik);
+						}
+						else {
+							ResetujVsechnyCipy();
+						}
 					}
+
 					//INFO: ve sprave zakazniku neuvazujeme ani long press UP/DOWN.
 					//Listovani zakaznikama jde jen pomoci single-short-press
 				}
