@@ -133,6 +133,9 @@ void PrekreslitDisplay(uint8_t novy_stav)
 	if (novy_stav == DISP_STAV_OFF) {
 		lcd_puts(SCREEN_OFF);
 	}
+	else if (novy_stav == DISP_STAV_POWER_LOSS) {
+		lcd_puts(SCREEN_POWER_LOSS);
+	}
 	else if (novy_stav == DISP_STAV_INICIALIZACE) {
 		lcd_puts(SCREEN_INICIALIZACE);
 	}

@@ -13,7 +13,8 @@ enum MozneStavyDispleje {
 	DISP_STAV_VYCEP_ZAKAZNIK_LITRY,
 	DISP_STAV_SPRAVA_ZAKAZNIK,
 	DISP_STAV_SPRAVA_CENA,
-	DISP_STAV_SPRAVA_CIPY
+	DISP_STAV_SPRAVA_CIPY,
+	DISP_STAV_POWER_LOSS
 };
                                         //|--------|---------||--------|---------|
 const char SCREEN_OFF[]                = " *STOPARI  NYMBURK*\n     *VYPNUTO!*";
@@ -31,6 +32,7 @@ const char SCREEN_SPRAVA_CENA_EDIT[]   = "*SPRAVA*  KC/litr\nCena[KC]: %2d.%d (N
 const char SCREEN_CIP_NEZNAMY[]        = " !! NEZNAMY CIP !!";
 const char SCREEN_INICIALIZACE[]       = "   INICIALIZACE..";
 const char SCREEN_VYPINAM[]            = "> Ukladam data..\n> A vypinam..";
+const char SCREEN_POWER_LOSS[]         = "!! Vypadek proudu !!\nData byla ulozena";
 
 #define DISPLAY_FRONTA_MAXLEN 5
 #define DISP_SIZE 43 //2x20 + jden znak na kazdej radek + 1 na zalomeni

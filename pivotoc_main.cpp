@@ -144,11 +144,15 @@ volatile bool  refresh_display;
 volatile uint8_t  timerDisplay;
 
 void main() __attribute__ ((noreturn));
+void SaveData(void);
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 void SetRegisters(void)
 {
+	EICRA = 0; //zadne preruseni od INT0/INT1
+	EIMSK = 0; // ----------- || ------------
+
 	//configure uart0  (57600, 8bits, no parity, 1 stop bit)
 	UBRR0H = 0;
 	UBRR0L = 16;
@@ -171,8 +175,25 @@ void SetRegisters(void)
 	TCCR1B = _BV(ICNC1) | _BV(CS12) | _BV(CS11); //D5 = PD5, falling edge,
 	TCNT1 = 0;
 
+	SOLENOID_TO_OUTPUT;
+
 	//disable unused peripherials
 	//PRR = ( _BV(PRTWI) | _BV(PRTIM1) | _BV(PRTIM2) ) ;
+}
+
+//======================================================
+void PovolitLowPowerDetect(void)
+{
+	PCMSK2 = _BV(PCINT20); //pin change int pro vstup 20 (PD4)
+	PCICR = _BV(PCIE2); //povolit pouze preruseni od pinove banky 2
+	PCIFR = _BV(PCIF2); //pro jistotu zapsat jednicku do tohohle int-flagu pro pripadne smazani
+}
+
+void VypnoutLowPowerDetect(void)
+{
+	PCMSK2 = 0; //pin change int od niceho
+	PCICR = 0; //vypnout vsecky pin change inty
+	PCIFR = _BV(PCIF2); //pro jistotu zapsat jednicku do tohohle int-flagu pro pripadne smazani
 }
 
 //======================================================
@@ -226,6 +247,12 @@ ISR(BADISR_vect) { //just for case
 	__asm__("nop\n\t");
 }
 
+//power loss detekce
+ISR(PCINT2_vect) {
+	SaveData();
+	DisplayFrontaPush(DISP_STAV_POWER_LOSS);
+	refresh_display = true;
+}
 
 //======================================================
 // posle raw data z poli primo na uart
@@ -531,9 +558,9 @@ void main (void)
 	SpocitatKontrolniSoucty();
 
 	aktualni_stav = STAV_OFF;
-	//sprintf((char *)displej_text, SCREEN_ZAKLADNI);
-	//DisplayFrontaAdd(DISP_STAV_OFF);
 	refresh_display = true;
+
+	PovolitLowPowerDetect();
 
 	while(1) {
 
@@ -558,15 +585,18 @@ void main (void)
 
 			if (STAV_KLICE == STAV_NORMAL)
 			{
+				PovolitLowPowerDetect();
 			}
 			else if (STAV_KLICE == STAV_SPRAVA)
 			{
 				sprava_substav = SUBSTAV_SPRAVA_ZAKLADNI;
+				PovolitLowPowerDetect();
 			}
 			else if (STAV_KLICE == STAV_OFF)
 			{
 				PrekreslitDisplay(DISP_STAV_VYPINAM);
 				SaveData();
+				VypnoutLowPowerDetect();
 			}
 			else
 			{
