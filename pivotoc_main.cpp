@@ -70,6 +70,7 @@ typedef union {
 #define BRANA_IMPULZY D //pin T1
 #define PIN_IMPULZY 5
 #define IMPULZ_COUNTER TCNT1
+#define IMPULZY_NA_LITR_NADEFINOVANO 300
 
 #define PORT_SOLENOID PORT_BUILD(BRANA_SOLENOID)
 #define DDR_SOLENOID DDR_BUILD(BRANA_SOLENOID)
@@ -85,6 +86,7 @@ typedef union {
 #define CTENI_TLACITEK_TIMEOUT 5
 #define TLACITKA_DLOUHY_STISK TIMER_1SEC / CTENI_TLACITEK_TIMEOUT
 #define TLACITKA_DLOUHY_STISK_RELOAD TLACITKA_DLOUHY_STISK / 4
+#define KLIC_STABILNI_STAV_TIMEOUT TIMER_1SEC / 5
 
 enum SubStav_sprava_enum{
 	SUBSTAV_SPRAVA_ZAKLADNI = 0,
@@ -119,6 +121,7 @@ volatile uint8_t  timerCteniCipu;
 volatile bool  bylTimer;
 
 volatile uint8_t  aktualni_stav;
+volatile uint8_t  timerKlic;
 
 volatile uint8_t  sprava_substav;
 volatile uint8_t  sprava_zobrazeny_zakaznik;
@@ -398,7 +401,7 @@ void LoadData(void)
 	p16 = (IntUnion_t*)&IMPULZY_NA_LITR;
 	(*p16).lsb = eeprom_read_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_LSB);
 	(*p16).msb = eeprom_read_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_MSB);
-	if (((*p16).lsb == 255) and ((*p16).msb == 255)) IMPULZY_NA_LITR = 300; //jen pro prvni nacteni cerstve eepromky
+	if (((*p16).lsb == 255) and ((*p16).msb == 255)) IMPULZY_NA_LITR = IMPULZY_NA_LITR_NADEFINOVANO; //jen pro prvni nacteni cerstve eepromky
 
 	//cykluj pres vsechny cipy a nacti jejich ulozena data
 	uint32_t *adresa;
@@ -575,38 +578,65 @@ void main (void)
 			if (timerDisplay > 0) timerDisplay--;
 			if (timerUart > 0) timerUart--;
 			if (timerTlacitka > 0) timerTlacitka--;
+			if (timerKlic > 0) timerKlic--;
 		}
 
 		//=======================================================================================
-		//kontrola aktualniho stavu polohy klice vytoc/sprava
-		if (STAV_KLICE != aktualni_stav)
+		//kontrola aktualniho stavu polohy klice off/vytoc/sprava
+		uint8_t volatile stav_klice = STAV_KLICE;
+
+		if (stav_klice != aktualni_stav)
 		{
-			OdhlasCip();
+			//odfiltrujeme si zakmity pomoci odpocitavani a pak teprv zmenime stav
+			//ale zaroven musime poznat ze se behem odpoctu treba ten stav klice zase zmenil,
+			//tudiz se znova odpocitava od zacatku
+			static uint8_t volatile minuly_stav_klice = STAV_OFF;
 
-			if (STAV_KLICE == STAV_NORMAL)
+			if (timerKlic == 0)
 			{
-				PovolitLowPowerDetect();
-			}
-			else if (STAV_KLICE == STAV_SPRAVA)
-			{
-				sprava_substav = SUBSTAV_SPRAVA_ZAKLADNI;
-				PovolitLowPowerDetect();
-			}
-			else if (STAV_KLICE == STAV_OFF)
-			{
-				PrekreslitDisplay(DISP_STAV_VYPINAM);
-				SaveData();
-				VypnoutLowPowerDetect();
-			}
-			else
-			{
-				//pokud by se to dostalo sem, znamena to ze klic aktivoval obe polohy zaroven, coz je blbost
-				//takze tezko jestli tuhle variantu vubec nejak resit a presouvat kvuli tomu
-				//to co je tu pod zavorkou nahoru do samostatnyho if a elseif
-			}
+				if (minuly_stav_klice == stav_klice)
+				{
+					OdhlasCip();
 
-			aktualni_stav = STAV_KLICE;
-			refresh_display = true;
+					if (stav_klice == STAV_NORMAL)
+					{
+						PovolitLowPowerDetect();
+					}
+					else if (stav_klice == STAV_SPRAVA)
+					{
+						sprava_substav = SUBSTAV_SPRAVA_ZAKLADNI;
+						PovolitLowPowerDetect();
+					}
+					else if (stav_klice == STAV_OFF)
+					{
+						PrekreslitDisplay(DISP_STAV_VYPINAM);
+						SaveData();
+						VypnoutLowPowerDetect();
+					}
+					else
+					{
+						//pokud by se to dostalo sem, znamena to ze klic aktivoval obe polohy zaroven, coz je blbost
+						//takze tezko jestli tuhle variantu vubec nejak resit a presouvat kvuli tomu
+						//to co je tu pod zavorkou nahoru do samostatnyho if a elseif
+					}
+
+					aktualni_stav = stav_klice;
+					refresh_display = true;
+				}
+				else //zrovna se klic prepnul
+				{
+					timerKlic = KLIC_STABILNI_STAV_TIMEOUT;
+					minuly_stav_klice = stav_klice;
+				}
+			}
+			else //cekame az dobehne timer do 0 a kontrolujem jestli je klic porad ve stejne (,,nove") poloze
+			{
+				if (minuly_stav_klice != stav_klice)
+				{
+					timerKlic = KLIC_STABILNI_STAV_TIMEOUT;
+					minuly_stav_klice = stav_klice;
+				}
+			}
 		}
 
 		//=======================================================================================
@@ -792,7 +822,7 @@ void main (void)
 
 		//=======================================================================================
 		//kontrola a pripadne odhlaseni timeoutovaneho cipu
-		if (je_prihlaseno)
+		if ( (aktualni_stav == STAV_NORMAL) && (je_prihlaseno) )
 		{
 			if (prihlaseny_cip_timeout == 0) OdhlasCip();
 		}
