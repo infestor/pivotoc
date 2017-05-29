@@ -6,6 +6,24 @@
 
 #define IMPULZ_COUNTER TCNT1
 
+                                        //|--------|---------||--------|---------|
+const char SCREEN_OFF[]                = " *STOPARI  NYMBURK*\n     *VYPNUTO!*";
+const char SCREEN_ZAKLADNI[]           = " *STOPARI  NYMBURK*\n      *VYCEP*";
+const char SCREEN_ZAKLADNI_SPRAVA[]    = " *STOPARI  NYMBURK*\n      *SPRAVA*";
+
+const char SCREEN_VYCEP_ZAKAZNIK_L1[]  = "*VYCEP* ZAKAZNIK %02d";
+const char SCREEN_VYCEP_ZAKAZNIK_L2[]  = "s[l]:%2.2f nyni:%1.2f";
+
+const char SCREEN_SPRAVA_ZAKAZNIK[]    = "*SPRAVA* ZAKAZNIK %02d\ns[l]:%2.3f KC:%d";
+const char SCREEN_SPRAVA_ZAKAZNIK_SMAZAT_VSE[]    = "*SPRAVA* Nulovat vse\nStiskni dlouze DEL";
+const char SCREEN_SPRAVA_CENA[]        = "*SPRAVA*  KC/litr\nCena[KC]: %2d.%d";
+const char SCREEN_SPRAVA_CENA_EDIT[]   = "*SPRAVA*  KC/litr\nCena[KC]: %2d.%d (NEW)";
+
+const char SCREEN_CIP_NEZNAMY[]        = " !! NEZNAMY CIP !!";
+const char SCREEN_INICIALIZACE[]       = "   INICIALIZACE..";
+const char SCREEN_VYPINAM[]            = "> Ukladam data..\n> A vypinam..";
+const char SCREEN_POWER_LOSS[]         = "!! Vypadek proudu !!\nData byla ulozena";
+
 volatile uint8_t display_fronta[DISPLAY_FRONTA_MAXLEN];
 volatile uint8_t display_fronta_len;
 volatile char displej_text[DISP_SIZE];
