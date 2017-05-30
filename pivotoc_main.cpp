@@ -70,7 +70,8 @@ typedef union {
 #define BRANA_IMPULZY D //pin T1
 #define PIN_IMPULZY 5
 #define IMPULZ_COUNTER TCNT1
-#define IMPULZY_NA_LITR_NADEFINOVANO 300
+
+#define IMPULZY_NA_LITR 300
 
 #define PORT_SOLENOID PORT_BUILD(BRANA_SOLENOID)
 #define DDR_SOLENOID DDR_BUILD(BRANA_SOLENOID)
@@ -105,10 +106,12 @@ volatile uint16_t AKTUALNI_IMPULZY[POCET_CIPU]; //aktualne vytocene impulzy od p
 volatile uint16_t AKUMULOVANE_IMPULZY[POCET_CIPU];
 volatile uint16_t AKUMULOVANA_CENA[POCET_CIPU]; //cena je v desitkach haliru tzn. 0.1Kc!!
 
-volatile uint32_t CELKOVE_IMPULZY;
+//volatile uint32_t CELKOVE_IMPULZY;
 volatile uint8_t  CENA_PIVA; //je to pocet padesatihaliru!! Takze realna cena je pulka tohodle cisla (a nebo je to cena za litr :)
-volatile uint16_t IMPULZY_NA_LITR;
-volatile double   CENA_ZA_IMPULZ;
+//volatile double   CENA_ZA_IMPULZ;
+#ifndef IMPULZY_NA_LITR
+	volatile uint16_t IMPULZY_NA_LITR;
+#endif
 
 volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
@@ -303,13 +306,15 @@ void ResetujVsechnyCipy(void)
 		VynulujCip(cip);
 	}
 
-	CELKOVE_IMPULZY = 0;
+	//CELKOVE_IMPULZY = 0;
 }	
 
 //======================================================
 void AkumulujCenu(uint8_t cip)
 {
-	uint16_t cena = AKTUALNI_IMPULZY[cip] * CENA_ZA_IMPULZ * 10; //je to na desitky haliru = 0.1kc
+	double cena_za_impulz_decikoruny = (double(CENA_PIVA) / IMPULZY_NA_LITR) * 10; //je to na desitky haliru = 0.1kc
+
+	uint16_t cena = AKTUALNI_IMPULZY[cip] * cena_za_impulz_decikoruny; //je to na desitky haliru = 0.1kc
 	AKUMULOVANA_CENA[cip] += cena;
 	AKUMULOVANE_IMPULZY[cip] += AKTUALNI_IMPULZY[cip];
 	AKTUALNI_IMPULZY[cip] = 0;
@@ -331,8 +336,6 @@ void ZmenCenu(uint8_t nova_cena)
 
 	//a ted nastavime novou cenu piva
 	CENA_PIVA = nova_cena;
-	//nova cena piva na impulz
-	CENA_ZA_IMPULZ = double(CENA_PIVA) / IMPULZY_NA_LITR;
 }
 
 //======================================================
@@ -343,9 +346,12 @@ void SaveData(void)
 
 	//mapovani musi byt stejne jako pro LoadData()
 	eeprom_update_byte((uint8_t *)ADRESA_EE_CENA_PIVA, CENA_PIVA);
+
+#ifndef IMPULZY_NA_LITR
 	p16 = (IntUnion_t*)&IMPULZY_NA_LITR;
 	eeprom_update_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_LSB, (*p16).lsb);
 	eeprom_update_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_MSB, (*p16).msb);
+#endif
 
 	//cyklujeme pres vsechny cipy
 	uint32_t *adresa;
@@ -381,11 +387,11 @@ void LoadData(void)
 	IntUnion_t volatile *p16;
 	Int32Union_t volatile eep_dword;
 
-	CELKOVE_IMPULZY = 0;
+	//CELKOVE_IMPULZY = 0;
 
 	//mapovani adres v eeporm:
 	//0 : cena piva
-	//1,2 : impulzy na litr
+	//1,2 : impulzy na litr (pouzivame konstantu, takze se to nemusi ukladat do pameti, ale priprava na to je v ifdefech)
 	//zakaznici (kazdy ma 4 byte):
 	//3,4 - impulzy zakaznika 0
 	//5,6 - cena zakaznika 0
@@ -396,10 +402,13 @@ void LoadData(void)
 
 	//nactem cenu a impulzy na litr
 	CENA_PIVA = eeprom_read_byte((uint8_t *)ADRESA_EE_CENA_PIVA);
+
+#ifndef IMPULZY_NA_LITR
 	p16 = (IntUnion_t*)&IMPULZY_NA_LITR;
 	(*p16).lsb = eeprom_read_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_LSB);
 	(*p16).msb = eeprom_read_byte((uint8_t *)ADRESA_EE_IMPULZY_NA_LITR_MSB);
 	if (((*p16).lsb == 255) and ((*p16).msb == 255)) IMPULZY_NA_LITR = IMPULZY_NA_LITR_NADEFINOVANO; //jen pro prvni nacteni cerstve eepromky
+#endif
 
 	//cykluj pres vsechny cipy a nacti jejich ulozena data
 	uint32_t *adresa;
@@ -419,13 +428,15 @@ void LoadData(void)
 		if (((*p16).lsb == 255) and ((*p16).msb == 255)) AKUMULOVANA_CENA[cip] = 0;
 
 		adresa += 4; //posun se na dalsi pametove misto
-		
+
 		AKTUALNI_IMPULZY[cip] = 0;
-		CELKOVE_IMPULZY += AKUMULOVANE_IMPULZY[cip];
+		//CELKOVE_IMPULZY += AKUMULOVANE_IMPULZY[cip];
 	}
 
 	//cena piva na impulz
-	CENA_ZA_IMPULZ = double(CENA_PIVA) / IMPULZY_NA_LITR;
+	//nakonec jsem odstranil globalni promennou CENA_ZA_IMPULZ protoze se tim usetri par bajtu za double
+	//a navic to treba nebude o tolik pomalejsi, kdyz se to pouziva jen v na par mistech
+	//CENA_ZA_IMPULZ = double(CENA_PIVA) / IMPULZY_NA_LITR;
 }
 
 //======================================================

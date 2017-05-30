@@ -4,7 +4,8 @@
 #include "display.h"
 #include "lcd.h"
 
-#define IMPULZ_COUNTER TCNT1
+#define IMPULZ_COUNTER TCNT1 //POZOR! - je to potreba synchronizovat s define v MAIN.CPP - tam je to taky
+#define IMPULZY_NA_LITR 300 //POZOR! - je to potreba synchronizovat s define v MAIN.CPP - tam je to taky
 
                                         //|--------|---------||--------|---------|
 const char SCREEN_OFF[]                = " *STOPARI  NYMBURK*\n     *VYPNUTO!*";
@@ -28,11 +29,11 @@ volatile uint8_t display_fronta[DISPLAY_FRONTA_MAXLEN];
 volatile uint8_t display_fronta_len;
 volatile char displej_text[DISP_SIZE];
 
-extern volatile uint16_t IMPULZY_NA_LITR;
-extern volatile double   CENA_ZA_IMPULZ;
+#ifndef IMPULZY_NA_LITR
+	extern volatile uint16_t IMPULZY_NA_LITR;
+#endif
+//extern volatile double   CENA_ZA_IMPULZ;
 extern volatile uint8_t  CENA_PIVA;
-
-//#define POCET_CIPU 5 //TODO: nejak to postelovat jinak aby se to propagovalo z adresy_cipu.h a ne takle prasacky
 
 extern volatile uint16_t AKTUALNI_IMPULZY[POCET_CIPU];
 extern volatile uint16_t AKUMULOVANE_IMPULZY[POCET_CIPU];
@@ -96,8 +97,9 @@ void ZobrazInfoCipSprava(uint8_t id)
 {
 	//tady pozor! - nezapocitavame stav IMPULZ_COUNTER protoze ten je aktivni jen pri stavu VYTOC,
 	//tady je vsecko uz pri prechodu na SPRAVA ulozeno v polich jednotlivych uzivatelu (po OdhlasCip)
+	double cena_za_impulz_decikoruny = (double(CENA_PIVA) / IMPULZY_NA_LITR) * 10; //je to na desitky haliru = 0.1kc
 	double litru = double(AKUMULOVANE_IMPULZY[id] + AKTUALNI_IMPULZY[id]) / IMPULZY_NA_LITR;
-	uint16_t cena = (AKTUALNI_IMPULZY[id] * CENA_ZA_IMPULZ * 10) + AKUMULOVANA_CENA[id]; //je to na desitky haliru = 0.1kc
+	uint16_t cena = (AKTUALNI_IMPULZY[id] * cena_za_impulz_decikoruny) + AKUMULOVANA_CENA[id]; //je to na desitky haliru = 0.1kc
 
 	//cena total je v korunach a zaokrouhluje se nahoru
 	uint16_t cena_total = (cena / 10);
