@@ -112,8 +112,6 @@ volatile double   CENA_ZA_IMPULZ;
 
 volatile bool     je_prihlaseno = false;
 volatile uint8_t  prihlaseny_cip_id;
-volatile uint8_t  prihlaseny_cip_adresa[CIP_ADDR_LEN];
-volatile uint16_t prihlaseny_cip_impulzy;
 volatile uint16_t prihlaseny_cip_timeout; //pouzije se i v rezimu ZPRAVA pro sledovani necinnosti
 
 //volatile uint16_t longTimer;
@@ -431,11 +429,11 @@ void LoadData(void)
 }
 
 //======================================================
-uint8_t KontrolniSoucet(const uint8_t adresa[CIP_ADDR_LEN])
+uint8_t KontrolniSoucet(const uint8_t adresa[OW_ROMCODE_SIZE])
 {
 	//cykluj pres vsecky znaky adresy cipu
 	uint8_t kontrolni_soucet = 0;
-	for(uint8_t i=0; i < 8; i++)
+	for(uint8_t i=0; i < OW_ROMCODE_SIZE; i++)
 	{
 		kontrolni_soucet += adresa[i];
 	}
@@ -454,20 +452,19 @@ inline void SpocitatKontrolniSoucty(void)
 }
 
 //======================================================
-uint8_t NajdiCip(const uint8_t adresa[CIP_ADDR_LEN])
+uint8_t NajdiCip(const uint8_t adresa[OW_ROMCODE_SIZE])
 {
 	uint8_t kontrolni_soucet = KontrolniSoucet(adresa);
-	uint8_t cip;
 	bool match;
 
 	//cykluj pres vsechny kontrolni soucty a hledej match, potom porovnej adresu
-	for (cip=0; cip < POCET_CIPU; cip++)
+	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
 		if (KONTROLNI_SOUCTY[cip] == kontrolni_soucet)
 		{
 			match = true;
 			//cykluj pres vsecky znaky adresy cipu
-			for(uint8_t i=0; i < 8; i++)
+			for(uint8_t i=0; i < OW_ROMCODE_SIZE; i++)
 			{
 				if (adresa[i] != ADRESY_CIPU[cip][i])
 				{
@@ -510,6 +507,7 @@ void OdhlasCip(void)
 //pak zkusi cip najit a pripadne prihlasit
 void PrectiCip(void)
 {
+	uint8_t prihlaseny_cip_adresa[OW_ROMCODE_SIZE];
 
 	if (ow_rom_search(OW_SEARCH_FIRST, (uint8_t *)prihlaseny_cip_adresa) == OW_LAST_DEVICE)
 	{
@@ -555,15 +553,12 @@ void main (void)
 
 	lcd_init(LCD_DISP_ON);
 	PrekreslitDisplay(DISP_STAV_INICIALIZACE);
-	//display_posledni_stav = DISP_STAV_INICIALIZACE;
 
 	LoadData();
 	SpocitatKontrolniSoucty();
 
 	aktualni_stav = STAV_OFF;
 	refresh_display = true;
-
-	PovolitLowPowerDetect();
 
 	while(1) {
 
@@ -583,7 +578,7 @@ void main (void)
 
 		//=======================================================================================
 		//kontrola aktualniho stavu polohy klice off/vytoc/sprava
-		uint8_t volatile stav_klice = STAV_KLICE;
+		uint8_t stav_klice = STAV_KLICE;
 
 		if (stav_klice != aktualni_stav)
 		{
