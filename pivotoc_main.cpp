@@ -522,7 +522,7 @@ void OdhlasCip(void)
 //pak zkusi cip najit a pripadne prihlasit
 void PrectiCip(void)
 {
-	uint8_t volatile prihlaseny_cip_adresa[OW_ROMCODE_SIZE];
+	uint8_t prihlaseny_cip_adresa[OW_ROMCODE_SIZE];
 
 	if (ow_rom_search(OW_SEARCH_FIRST, (uint8_t *)prihlaseny_cip_adresa) == OW_LAST_DEVICE)
 	{
