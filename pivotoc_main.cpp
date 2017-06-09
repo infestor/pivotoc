@@ -527,6 +527,18 @@ void PrectiCip(void)
 	if (ow_rom_search(OW_SEARCH_FIRST, (uint8_t *)prihlaseny_cip_adresa) == OW_LAST_DEVICE)
 	{
 		//cip byl detekovan na 1-wire a jeho data nactena, zkusime ho najit v databazi
+		//ale nejdriv musime otocit vsecky BYTE v poli, protoze ted je LSByte ulozen na pozici 0 a MSB na 7
+		//jenze my to potrebujeme obracene
+		uint8_t buff;
+		for (uint8_t i = ((OW_ROMCODE_SIZE/2)-1); i >= 0; i--)
+		{
+			uint8_t opacna_strana_pole = ((OW_ROMCODE_SIZE/2)-1) - i;
+
+			buff = prihlaseny_cip_adresa[opacna_strana_pole];
+			prihlaseny_cip_adresa[opacna_strana_pole] = prihlaseny_cip_adresa[i];
+			prihlaseny_cip_adresa[i] = buff;
+		}
+
 		uint8_t nalezeny_cip = NajdiCip((uint8_t *)prihlaseny_cip_adresa);
 		if (nalezeny_cip < 255)
 		{
