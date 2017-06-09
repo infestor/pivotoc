@@ -310,11 +310,9 @@ void ResetujVsechnyCipy(void)
 }	
 
 //======================================================
-void AkumulujCenu(uint8_t cip)
+void AkumulujCenu(uint8_t cip, double *cena_za_impulz_decikoruny)
 {
-	double cena_za_impulz_decikoruny = (double(CENA_PIVA) / IMPULZY_NA_LITR) * 10; //je to na desitky haliru = 0.1kc
-
-	uint16_t cena = AKTUALNI_IMPULZY[cip] * cena_za_impulz_decikoruny; //je to na desitky haliru = 0.1kc
+	uint16_t cena = AKTUALNI_IMPULZY[cip] * (*cena_za_impulz_decikoruny); //je to na desitky haliru = 0.1kc
 	AKUMULOVANA_CENA[cip] += cena;
 	AKUMULOVANE_IMPULZY[cip] += AKTUALNI_IMPULZY[cip];
 	AKTUALNI_IMPULZY[cip] = 0;
@@ -329,9 +327,11 @@ void ZmenCenu(uint8_t nova_cena)
 	//pak preneseme vytocene impulzy do akumulovanych
 	//vynulujeme vytocene impulzy
 
+	double cena_za_impulz_decikoruny = (double(CENA_PIVA) / IMPULZY_NA_LITR) * 10; //je to na desitky haliru = 0.1kc
+
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
-		AkumulujCenu(cip);
+		AkumulujCenu(cip, &cena_za_impulz_decikoruny);
 	}
 
 	//a ted nastavime novou cenu piva
@@ -356,13 +356,14 @@ void SaveData(void)
 	//cyklujeme pres vsechny cipy
 	uint32_t *adresa;
 	adresa = (uint32_t*)ADRESA_EE_CIPY_START;
+	double cena_za_impulz_decikoruny = (double(CENA_PIVA) / IMPULZY_NA_LITR) * 10; //je to na desitky haliru = 0.1kc
 
 	for (uint8_t cip=0; cip < POCET_CIPU; cip++)
 	{
 		//nejdriv musime presunout vsechno do akumulovanych impulzu
 		//a taky spocitat cenu a tu taky pricist do akumulovane
 		//a pak teprve muzeme ukladat do eeprom
-		AkumulujCenu(cip);
+		AkumulujCenu(cip,  &cena_za_impulz_decikoruny);
 
 		p16 = (IntUnion_t*)&AKUMULOVANE_IMPULZY[cip];
 		eep_dword.uint1.lsb = (*p16).lsb;
@@ -401,7 +402,10 @@ void LoadData(void)
 	//u vsech 16bit dat je prvni LSB
 
 	//nactem cenu a impulzy na litr
+	//pokud by to bylo prvni nacteni z eeprom, dame tam nejakou rozumnou hodnotu
+	//(treba dvacku, tzn 40 padesatihaliru)
 	CENA_PIVA = eeprom_read_byte((uint8_t *)ADRESA_EE_CENA_PIVA);
+	if (CENA_PIVA == 255) CENA_PIVA = 40;
 
 #ifndef IMPULZY_NA_LITR
 	p16 = (IntUnion_t*)&IMPULZY_NA_LITR;
